@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Training</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+
+    .page-card {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 18px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    .row {
+      margin-bottom: 12px;
+    }
+
+    .row label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .row select,
+    .row button {
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .tabs-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      margin-top: 16px;
+    }
+
+    .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #bbb;
+      background: #fafafa;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: white;
+    }
+
+    .tab-close {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      color: inherit;
+      padding: 0;
+    }
+
+    .tab-add {
+      margin-left: auto;
+      border: 1px solid #1f6feb;
+      background: #1f6feb;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .tab-panels {
+      margin-top: 14px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .terminal-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #111;
+    }
+
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #222;
+      color: white;
+      font-size: 13px;
+    }
+
+    .terminal-status {
+      color: #9ad;
+      margin-left: 8px;
+    }
+
+    .terminal-box {
+      width: 100%;
+      height: 360px;
+    }
+
+    .msg {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: #f7f7f7;
+      border-left: 4px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-card">
+    <h1>Training</h1>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="msg">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" action="{% url 'training_run_nginx' %}">
+      {% csrf_token %}
+
+      <div class="row">
+        <label for="action">Action</label>
+        <select id="action" name="action" required>
+          <option value="">Select action</option>
+          <option value="start">Start</option>
+          <option value="stop">Stop</option>
+          <option value="remove">Remove</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="script_choice">Script (used when Action=Start)</label>
+        <select id="script_choice" name="script_choice">
+          <option value="">Select script</option>
+          {% for value, label in script_options %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="controls">
+        <button type="submit">Run</button>
+        <button type="button" id="open-terminal-btn">Open New Tab Session</button>
+      </div>
+    </form>
+
+    <div class="tabs-bar" id="tabs-bar"></div>
+    <div class="tab-panels" id="tab-panels"></div>
+  </div>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+
+  <script>
+    function getCookie(name) {
+      const v = "; " + document.cookie;
+      const parts = v.split("; " + name + "=");
+      if (parts.length === 2) return parts.pop().split(";").shift();
+      return "";
+    }
+
+    const actionEl = document.getElementById("action");
+    const scriptEl = document.getElementById("script_choice");
+    const openBtn = document.getElementById("open-terminal-btn");
+    const tabsBar = document.getElementById("tabs-bar");
+    const panelsRoot = document.getElementById("tab-panels");
+
+    const sessions = {};
+    let sessionSeq = 0;
+    let activeSessionId = null;
+
+    function toggleScriptSelect() {
+      const isStart = actionEl.value === "start";
+      scriptEl.disabled = !isStart;
+      if (!isStart) {
+        scriptEl.value = "";
+      }
+    }
+
+    actionEl.addEventListener("change", toggleScriptSelect);
+    toggleScriptSelect();
+
+    function setActiveSession(sessionId) {
+      activeSessionId = sessionId;
+
+      Object.keys(sessions).forEach((id) => {
+        const tab = sessions[id].tabEl;
+        const panel = sessions[id].panelEl;
+        if (id === sessionId) {
+          tab.classList.add("active");
+          panel.classList.add("active");
+        } else {
+          tab.classList.remove("active");
+          panel.classList.remove("active");
+        }
+      });
+    }
+
+    function removeSession(sessionId) {
+      const session = sessions[sessionId];
+      if (!session) return;
+
+      try {
+        if (session.inputDisposable) {
+          session.inputDisposable.dispose();
+        }
+      } catch (e) {}
+
+      try {
+        if (session.ws) {
+          session.ws.close(1000, "client-close");
+        }
+      } catch (e) {}
+
+      try {
+        session.term.dispose();
+      } catch (e) {}
+
+      if (session.tabEl.parentNode) {
+        session.tabEl.parentNode.removeChild(session.tabEl);
+      }
+      if (session.panelEl.parentNode) {
+        session.panelEl.parentNode.removeChild(session.panelEl);
+      }
+
+      delete sessions[sessionId];
+
+      const ids = Object.keys(sessions);
+      if (activeSessionId === sessionId) {
+        if (ids.length > 0) {
+          setActiveSession(ids[ids.length - 1]);
+        } else {
+          activeSessionId = null;
+        }
+      }
+    }
+
+    async function createSessionTab() {
+      sessionSeq += 1;
+      const sessionId = "session-" + sessionSeq;
+
+      const tabBtn = document.createElement("button");
+      tabBtn.type = "button";
+      tabBtn.className = "tab-btn";
+
+      const tabLabel = document.createElement("span");
+      tabLabel.textContent = "Tab " + sessionSeq;
+
+      const tabClose = document.createElement("button");
+      tabClose.type = "button";
+      tabClose.className = "tab-close";
+      tabClose.textContent = "×";
+
+      tabBtn.appendChild(tabLabel);
+      tabBtn.appendChild(tabClose);
+      tabsBar.appendChild(tabBtn);
+
+      const panel = document.createElement("div");
+      panel.className = "tab-panel";
+
+      const terminalCard = document.createElement("div");
+      terminalCard.className = "terminal-card";
+
+      const terminalHeader = document.createElement("div");
+      terminalHeader.className = "terminal-header";
+
+      const headerLeft = document.createElement("div");
+      headerLeft.textContent = "Terminal " + sessionSeq;
+
+      const status = document.createElement("span");
+      status.className = "terminal-status";
+      status.textContent = "Connecting...";
+
+      headerLeft.appendChild(status);
+
+      const headerRight = document.createElement("button");
+      headerRight.type = "button";
+      headerRight.textContent = "Close Tab";
+
+      terminalHeader.appendChild(headerLeft);
+      terminalHeader.appendChild(headerRight);
+
+      const terminalBox = document.createElement("div");
+      terminalBox.className = "terminal-box";
+
+      terminalCard.appendChild(terminalHeader);
+      terminalCard.appendChild(terminalBox);
+      panel.appendChild(terminalCard);
+      panelsRoot.appendChild(panel);
+
+      const term = new Terminal({
+        cursorBlink: true,
+        convertEol: true,
+        fontSize: 13
+      });
+      term.open(terminalBox);
+
+      const session = {
+        tabEl: tabBtn,
+        panelEl: panel,
+        term: term,
+        ws: null,
+        inputDisposable: null
+      };
+      sessions[sessionId] = session;
+
+      function closeSession() {
+        removeSession(sessionId);
+      }
+
+      tabClose.addEventListener("click", closeSession);
+      headerRight.addEventListener("click", closeSession);
+      tabBtn.addEventListener("click", function (e) {
+        if (e.target === tabClose) return;
+        setActiveSession(sessionId);
+      });
+
+      setActiveSession(sessionId);
+
+      try {
+        const res = await fetch("/myapp/training/connect-terminal/", {
+          method: "POST",
+          headers: { "X-CSRFToken": getCookie("csrftoken") }
+        });
+
+        if (!res.ok) {
+          status.textContent = "Failed";
+          term.write("\r\nFailed to get terminal token.\r\n");
+          return;
+        }
+
+        const data = await res.json();
+
+        const scheme = location.protocol === "https:" ? "wss" : "ws";
+        const wsHost = location.hostname + ":8001";
+        const wsUrl = scheme + "://" + wsHost + data.ws_url + "?token=" + encodeURIComponent(data.token);
+
+        const ws = new WebSocket(wsUrl);
+        session.ws = ws;
+
+        ws.onopen = function () {
+          status.textContent = "Connected";
+          term.write("\r\nConnected to nginx shell\r\n");
+        };
+
+        ws.onmessage = function (e) {
+          term.write(e.data);
+        };
+
+        ws.onclose = function (e) {
+          status.textContent = "Closed";
+          term.write("\r\nSession closed (code=" + e.code + ", reason=" + (e.reason || "none") + ")\r\n");
+        };
+
+        ws.onerror = function () {
+          status.textContent = "Error";
+          term.write("\r\nWebSocket error\r\n");
+        };
+
+        session.inputDisposable = term.onData(function (d) {
+          if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+            session.ws.send(d);
+          }
+        });
+      } catch (err) {
+        status.textContent = "Error";
+        term.write("\r\nUnexpected error while connecting terminal.\r\n");
+      }
+    }
+
+    openBtn.addEventListener("click", createSessionTab);
+  </script>
+</body>
+</html>
+
