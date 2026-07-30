@@ -17,15 +17,15 @@ from django.views.decorators.http import require_POST
 SCRIPT_DIR = Path(__file__).resolve().parent / "ai_containers"
 
 SCRIPT_CHOICES = {
-    "nginx001": SCRIPT_DIR / "nginx001.sh",
-    "nginx002": SCRIPT_DIR / "nginx002.sh",
-    "nginx003": SCRIPT_DIR / "nginx003.sh",
+    "ollama001": SCRIPT_DIR / "ollama001.sh",
+    "ollama002": SCRIPT_DIR / "ollama002.sh",
+    "ollama003": SCRIPT_DIR / "ollama003.sh",
 }
 
 ACTION_LABELS = {
-    "start": "Start Nginx",
-    "stop": "Stop Nginx",
-    "remove": "Remove Nginx",
+    "start": "Start Ollama",
+    "stop": "Stop Ollama",
+    "remove": "Remove Ollama",
 }
 
 
@@ -60,16 +60,16 @@ def training_page(request):
         "myapp/training.html",
         {
             "script_options": [
-                ("nginx001", "nginx001.sh"),
-                ("nginx002", "nginx002.sh"),
-                ("nginx003", "nginx003.sh"),
+                ("ollama001", "ollama001.sh"),
+                ("ollama002", "ollama002.sh"),
+                ("ollama003", "ollama003.sh"),
             ]
         },
     )
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
-def training_run_nginx(request):
+def training_run_ollama(request):
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
@@ -90,9 +90,9 @@ def training_run_nginx(request):
             # SECURITY_NOTE: script path is selected from a fixed server-side allow-list.
             cmd = ["/bin/sh", str(script_path)]
         elif action == "stop":
-            cmd = ["docker", "stop", "nginx"]
+            cmd = ["docker", "stop", "ollama"]
         else:  # remove
-            cmd = ["docker", "rm", "-f", "nginx"]
+            cmd = ["docker", "rm", "-f", "ollama"]
 
         result = subprocess.run(
             cmd,
@@ -123,7 +123,7 @@ def training_run_nginx(request):
 @user_passes_test(lambda u: u.is_staff)
 def training_connect_terminal(request):
     token = signing.dumps(
-        {"container": "nginx", "user": request.user.username},
+        {"container": "ollama", "user": request.user.username},
         salt="xterm-connect"
     )
     return JsonResponse({

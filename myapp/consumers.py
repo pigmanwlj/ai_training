@@ -20,7 +20,7 @@ class DockerTerminalConsumer(AsyncWebsocketConsumer):
             raw_qs = self.scope.get("query_string", b"").decode()
             token = parse_qs(raw_qs).get("token", [""])[0]
             data = signing.loads(token, salt="xterm-connect", max_age=300)
-            if data.get("container") != "nginx":
+            if data.get("container") != "ollama":
                 await self.close(code=4400)
                 return
         except Exception:
@@ -30,7 +30,7 @@ class DockerTerminalConsumer(AsyncWebsocketConsumer):
         self.master_fd, self.slave_fd = pty.openpty()
 
         self.proc = subprocess.Popen(
-            ["docker", "exec", "-it", "nginx", "/bin/sh"],
+            ["docker", "exec", "-it", "ollama", "/bin/sh"],
             stdin=self.slave_fd,
             stdout=self.slave_fd,
             stderr=self.slave_fd,

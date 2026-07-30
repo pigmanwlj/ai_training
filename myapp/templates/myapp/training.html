@@ -148,7 +148,7 @@
       {% endfor %}
     {% endif %}
 
-    <form method="post" action="{% url 'training_run_nginx' %}">
+    <form method="post" action="{% url 'training_run_ollama' %}">
       {% csrf_token %}
 
       <div class="row">
@@ -373,7 +373,7 @@
 
         ws.onopen = function () {
           status.textContent = "Connected";
-          term.write("\r\nConnected to nginx shell\r\n");
+          term.write("\r\nConnected to ollama shell\r\n");
         };
 
         ws.onmessage = function (e) {
