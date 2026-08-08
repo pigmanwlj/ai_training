@@ -11,12 +11,13 @@
     }
 
     .page-card {
-      max-width: 1200px;
+      width: min(98vw, 1800px);
+      max-width: none;
       margin: 0 auto;
       background: #fff;
       border: 1px solid #ddd;
       border-radius: 10px;
-      padding: 18px;
+      padding: 12px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
     }
 
@@ -81,16 +82,6 @@
       padding: 0;
     }
 
-    .tab-add {
-      margin-left: auto;
-      border: 1px solid #1f6feb;
-      background: #1f6feb;
-      color: white;
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
     .tab-panels {
       margin-top: 14px;
     }
@@ -127,7 +118,8 @@
 
     .terminal-box {
       width: 100%;
-      height: 360px;
+      height: calc(100vh - 320px);
+      min-height: 540px;
     }
 
     .msg {
@@ -135,6 +127,67 @@
       padding: 8px 10px;
       background: #f7f7f7;
       border-left: 4px solid #ddd;
+    }
+
+    body.terminal-fullscreen {
+      margin: 0;
+      overflow: hidden;
+      background: #0b0b0b;
+    }
+
+    body.terminal-fullscreen .page-card {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      width: auto;
+      max-width: none;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      padding: 10px;
+      box-shadow: none;
+      background: #101010;
+      color: #f5f5f5;
+    }
+
+    body.terminal-fullscreen .tabs-bar {
+      border-bottom-color: #2f2f2f;
+      margin-top: 8px;
+    }
+
+    body.terminal-fullscreen .tab-btn {
+      background: #1c1c1c;
+      border-color: #3b3b3b;
+      color: #f2f2f2;
+    }
+
+    body.terminal-fullscreen .tab-btn.active {
+      background: #1f6feb;
+      border-color: #1f6feb;
+      color: white;
+    }
+
+    body.terminal-fullscreen .terminal-card {
+      border-color: #333;
+      background: #000;
+    }
+
+    body.terminal-fullscreen .terminal-box {
+      height: calc(100vh - 210px);
+      min-height: 0;
+    }
+
+    body.terminal-fullscreen .msg {
+      background: #1c1c1c;
+      border-left-color: #4a4a4a;
+      color: #ececec;
+    }
+
+    body.terminal-fullscreen .controls button,
+    body.terminal-fullscreen .row select {
+      background: #1d1d1d;
+      color: #f0f0f0;
+      border: 1px solid #444;
     }
   </style>
 </head>
@@ -174,15 +227,18 @@
       <div class="controls">
         <button type="submit">Run</button>
         <button type="button" id="open-terminal-btn">Open New Tab Session</button>
+        <button type="button" id="toggle-fullscreen-btn">Full Screen</button>
       </div>
     </form>
 
+    <div class="msg" style="color: red; font-weight: bold;">Please run "export OLLAMA_HOST=airepository.saicmotor.com:11434" first to select AI model repository.</div>
     <div class="tabs-bar" id="tabs-bar"></div>
     <div class="tab-panels" id="tab-panels"></div>
   </div>
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 
   <script>
     function getCookie(name) {
@@ -195,6 +251,7 @@
     const actionEl = document.getElementById("action");
     const scriptEl = document.getElementById("script_choice");
     const openBtn = document.getElementById("open-terminal-btn");
+    const fullscreenBtn = document.getElementById("toggle-fullscreen-btn");
     const tabsBar = document.getElementById("tabs-bar");
     const panelsRoot = document.getElementById("tab-panels");
 
@@ -213,10 +270,29 @@
     actionEl.addEventListener("change", toggleScriptSelect);
     toggleScriptSelect();
 
+    function fitActiveSession() {
+      if (!activeSessionId || !sessions[activeSessionId]) return;
+      const s = sessions[activeSessionId];
+      if (s.fitAddon) {
+        requestAnimationFrame(function () {
+          s.fitAddon.fit();
+        });
+      }
+    }
+
+    fullscreenBtn.addEventListener("click", function () {
+      document.body.classList.toggle("terminal-fullscreen");
+      const isFull = document.body.classList.contains("terminal-fullscreen");
+      fullscreenBtn.textContent = isFull ? "Small Screen" : "Full Screen";
+      fitActiveSession();
+    });
+
+    window.addEventListener("resize", fitActiveSession);
+
     function setActiveSession(sessionId) {
       activeSessionId = sessionId;
 
-      Object.keys(sessions).forEach((id) => {
+      Object.keys(sessions).forEach(function (id) {
         const tab = sessions[id].tabEl;
         const panel = sessions[id].panelEl;
         if (id === sessionId) {
@@ -227,6 +303,8 @@
           panel.classList.remove("active");
         }
       });
+
+      fitActiveSession();
     }
 
     function removeSession(sessionId) {
@@ -282,7 +360,7 @@
       const tabClose = document.createElement("button");
       tabClose.type = "button";
       tabClose.className = "tab-close";
-      tabClose.textContent = "×";
+      tabClose.textContent = "x";
 
       tabBtn.appendChild(tabLabel);
       tabBtn.appendChild(tabClose);
@@ -324,14 +402,19 @@
       const term = new Terminal({
         cursorBlink: true,
         convertEol: true,
-        fontSize: 13
+        fontSize: 14
       });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
       term.open(terminalBox);
+      fitAddon.fit();
 
       const session = {
         tabEl: tabBtn,
         panelEl: panel,
         term: term,
+        fitAddon: fitAddon,
         ws: null,
         inputDisposable: null
       };
@@ -374,6 +457,7 @@
         ws.onopen = function () {
           status.textContent = "Connected";
           term.write("\r\nConnected to ollama shell\r\n");
+          fitAddon.fit();
         };
 
         ws.onmessage = function (e) {
