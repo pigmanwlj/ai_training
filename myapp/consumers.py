@@ -1,12 +1,14 @@
 import asyncio
 import os
 import pty
-import signal
 import subprocess
 from urllib.parse import parse_qs
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core import signing
+
+# from myapp.models import TrainingContainer
 
 
 class DockerTerminalConsumer(AsyncWebsocketConsumer):
@@ -20,17 +22,20 @@ class DockerTerminalConsumer(AsyncWebsocketConsumer):
             raw_qs = self.scope.get("query_string", b"").decode()
             token = parse_qs(raw_qs).get("token", [""])[0]
             data = signing.loads(token, salt="xterm-connect", max_age=300)
-            if data.get("container") != "ollama":
-                await self.close(code=4400)
-                return
         except Exception:
             await self.close(code=4400)
             return
 
+        container = await self._get_valid_user_container(user.id, data)
+        if not container:
+            await self.close(code=4403)
+            return
+
+        self.docker_name = container.docker_name
         self.master_fd, self.slave_fd = pty.openpty()
 
         self.proc = subprocess.Popen(
-            ["docker", "exec", "-it", "ollama", "/bin/sh"],
+            ["docker", "exec", "-it", self.docker_name, "/bin/sh"],
             stdin=self.slave_fd,
             stdout=self.slave_fd,
             stderr=self.slave_fd,
@@ -39,6 +44,35 @@ class DockerTerminalConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
         self.reader_task = asyncio.create_task(self._read_output())
+
+    @database_sync_to_async
+    def _get_valid_user_container(self, user_id, token_data):
+        from myapp.models import TrainingContainer  # Add this line
+
+        container_id = token_data.get("container_id")
+        token_user_id = token_data.get("user_id")
+        docker_name = token_data.get("docker_name")
+        nonce = token_data.get("nonce")
+
+        if token_user_id != user_id:
+            return None
+
+        try:
+            obj = TrainingContainer.objects.get(
+                id=container_id,
+                owner_id=user_id,
+                status=TrainingContainer.Status.RUNNING,
+            )
+        except TrainingContainer.DoesNotExist:
+            return None
+
+        if obj.docker_name != docker_name:
+            return None
+
+        if not obj.token_nonce or obj.token_nonce != nonce:
+            return None
+
+        return obj
 
     async def _read_output(self):
         try:

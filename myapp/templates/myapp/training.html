@@ -201,6 +201,12 @@
       {% endfor %}
     {% endif %}
 
+    {% if my_active_container %}
+      <div class="msg" style="color: #1b5e20; font-weight: bold;">
+        Your active container: {{ my_active_container.docker_name }} ({{ my_active_container.profile }}) Port: {{ my_active_container.host_port }}
+      </div>
+    {% endif %}
+
     <form method="post" action="{% url 'training_run_ollama' %}">
       {% csrf_token %}
 

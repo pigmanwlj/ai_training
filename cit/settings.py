@@ -162,12 +162,16 @@ AUTH_LDAP_GROUP_TYPE = ActiveDirectoryGroupType()
 AUTH_LDAP_USER_ATTR_MAP = {  
     "first_name": "givenName",
     "last_name": "sn",
-    "email": "mail"
+    "email": "mail",
 }
 
 AUTH_LDAP_USER_FLAGS_BY_GROUP = {
     'is_active': 'CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN',
     'is_staff': 'CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN',
+}
+
+AUTH_LDAP_CONNECTION_OPTIONS = {
+    ldap.OPT_NETWORK_TIMEOUT: 10,  # 10-second timeout
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
