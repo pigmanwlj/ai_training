@@ -11,174 +11,200 @@ https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+
+import ldap
+from django_auth_ldap.config import LDAPSearch, ActiveDirectoryGroupType
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-dlsuc(0i!8^bs$g3l@fms(egkm#h0%tb7a&!n+_sf@g-*krjsc'
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-change-me")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = ['*']
-
-
-# Application definition
-
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'myapp.apps.MyappConfig',    
-    'import_export',
-    'channels',
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+    if host.strip()
 ]
 
-ASGI_APPLICATION = 'cit.asgi.application'
+# Application definition
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "myapp.apps.MyappConfig",
+    "import_export",
+    "channels",
+]
+
+ASGI_APPLICATION = "cit.asgi.application"
+
+REDIS_HOST = os.environ.get("REDIS_HOST", "nfs-redisai-svc")
+REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+REDIS_DB = os.environ.get("REDIS_DB", "0")
+REDIS_URL = os.environ.get("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
 
 CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
     },
 }
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'cit.urls'
+ROOT_URLCONF = "cit.urls"
 
-MEDIA_ROOT = '/cit/html/'
+MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
+MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
 
-MEDIA_URL = 'http://172.20.28.173:8000/'
+STATIC_URL = "/static/"
+STATIC_ROOT = os.environ.get("STATIC_ROOT", str(BASE_DIR / "staticfiles"))
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'cit.wsgi.application'
-
+WSGI_APPLICATION = "cit.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
-
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'cit',
-        'USER': 'html',
-        'PASSWORD': 'html',
-        'HOST': 'mysql',
-        'PORT': '3306',
+    "default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.environ.get("DB_NAME", "cit"),
+        "USER": os.environ.get("DB_USER", "html"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "html"),
+        "HOST": os.environ.get("DB_HOST", "nfs-mysqlai-svc"),
+        "PORT": os.environ.get("DB_PORT", "3306"),
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/3.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/3.2/topics/i18n/
-
-# LANGUAGE_CODE = 'zh-hans'
-
-TIME_ZONE = 'Asia/Shanghai'
-
+TIME_ZONE = "Asia/Shanghai"
 USE_I18N = True
-
 USE_L10N = True
-
 USE_TZ = True
 
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.2/howto/static-files/
+# LDAP
+AUTHENTICATION_BACKENDS = (
+    "django_auth_ldap.backend.LDAPBackend",
+    "django.contrib.auth.backends.ModelBackend",
+)
 
-STATIC_URL = '/static/'
+AUTH_LDAP_SERVER_URI = os.environ.get("LDAP_SERVER_URI", "ldap://172.18.100.13:389")
+AUTH_LDAP_BIND_DN = os.environ.get(
+    "LDAP_BIND_DN",
+    "CN=CHQK8SAuthentication(chqk8sauthentication),CN=Users,DC=APPCN,DC=CHN",
+)
+AUTH_LDAP_BIND_PASSWORD = os.environ.get("LDAP_BIND_PASSWORD", "change-me")
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
+AUTH_LDAP_USER_SEARCH = LDAPSearch(
+    os.environ.get("LDAP_USER_BASE", "OU=APPCN,DC=APPCN,DC=CHN"),
+    ldap.SCOPE_SUBTREE,
+    os.environ.get("LDAP_USER_FILTER", "(sAMAccountName=%(user)s)"),
+)
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+    os.environ.get("LDAP_GROUP_BASE", "OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN"),
+    ldap.SCOPE_SUBTREE,
+    os.environ.get("LDAP_GROUP_FILTER", "(objectclass=group)"),
+)
 
-import ldap
-from django_auth_ldap.config import LDAPSearch,PosixGroupType,ActiveDirectoryGroupType #导入LDAP model
-
-AUTHENTICATION_BACKENDS = (  
-    'django_auth_ldap.backend.LDAPBackend',  #配置为先使用LDAP认证，如通过认证则不再使用后面的认证方式
-    'django.contrib.auth.backends.ModelBackend',  
-)  
-
-AUTH_LDAP_SERVER_URI = 'ldap://172.18.100.13:389'
-AUTH_LDAP_BIND_DN = 'CN=CHQK8SAuthentication(chqk8sauthentication),CN=Users,DC=APPCN,DC=CHN'
-AUTH_LDAP_BIND_PASSWORD = 'wlj3494-@' 
-AUTH_LDAP_USER_SEARCH = LDAPSearch('OU=APPCN,DC=APPCN,DC=CHN', ldap.SCOPE_SUBTREE, '(sAMAccountName=%(user)s)')
-AUTH_LDAP_GROUP_SEARCH = LDAPSearch('OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN', ldap.SCOPE_SUBTREE, '(objectclass=group)')
 AUTH_LDAP_GROUP_TYPE = ActiveDirectoryGroupType()
 
-#将账号的姓、名、邮件地址保存到django的auth_user表中，在admin后台可以看到
-AUTH_LDAP_USER_ATTR_MAP = {  
+AUTH_LDAP_USER_ATTR_MAP = {
     "first_name": "givenName",
     "last_name": "sn",
     "email": "mail",
 }
 
 AUTH_LDAP_USER_FLAGS_BY_GROUP = {
-    'is_active': 'CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN',
-    'is_staff': 'CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN',
+    "is_active": os.environ.get(
+        "LDAP_ACTIVE_GROUP_DN",
+        "CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN",
+    ),
+    "is_staff": os.environ.get(
+        "LDAP_STAFF_GROUP_DN",
+        "CN=CHQ-INFRA COE,OU=Groups,OU=CHQ,OU=APPCN,DC=APPCN,DC=CHN",
+    ),
 }
 
 AUTH_LDAP_CONNECTION_OPTIONS = {
-    ldap.OPT_NETWORK_TIMEOUT: 10,  # 10-second timeout
+    ldap.OPT_NETWORK_TIMEOUT: 10,
 }
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = '172.18.3.10'
-EMAIL_PORT = 25
-EMAIL_HOST_USER = 'Grafana_APPCHQ'
-EMAIL_HOST_PASSWORD = 'Grafana89'
-EMAIL_USE_TLS = False
-EMAIL_FROM = 'Grafana_APPCHQ@app.com.cn'
+# Email
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "172.18.3.10")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "Grafana_APPCHQ")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "change-me")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "False").lower() == "true"
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "Grafana_APPCHQ@app.com.cn")
+
+# Optional proxy / ingress settings
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+# Useful when you deploy behind an ingress and want CSRF to work cleanly
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 

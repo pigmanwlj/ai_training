@@ -119,13 +119,6 @@ class pr(models.Model):
         verbose_name_plural = "采购数据"
 
 
-class training_platform(pr):
-    class Meta:
-        proxy = True
-        verbose_name = "训练平台"
-        verbose_name_plural = "训练平台"
-
-
 class TrainingContainer(models.Model):
     class Status(models.TextChoices):
         FREE = "free", "Free"
@@ -141,7 +134,7 @@ class TrainingContainer(models.Model):
 
     slot_name = models.CharField("槽位名", max_length=32, unique=True)
     profile = models.CharField("硬件配置", max_length=32, choices=Profile.choices)
-    docker_name = models.CharField("容器名", max_length=128, unique=True)
+    pod_name = models.CharField("容器名", max_length=128, unique=True)
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -160,10 +153,17 @@ class TrainingContainer(models.Model):
 
     def __str__(self):
         owner_name = self.owner.username if self.owner else "none"
-        return f"{self.slot_name}:{self.profile}:{self.docker_name}:{owner_name}:{self.status}"
+        return f"{self.slot_name}:{self.profile}:{self.pod_name}:{owner_name}:{self.status}"
 
     class Meta:
         db_table = "training_container"
         verbose_name = "训练容器"
         verbose_name_plural = "训练容器"
+
+
+class training_platform(TrainingContainer):
+    class Meta:
+        proxy = True
+        verbose_name = "训练平台"
+        verbose_name_plural = "训练平台"
 

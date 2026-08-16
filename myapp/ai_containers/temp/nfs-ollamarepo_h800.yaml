@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-ollamarepo_h800
+  name: nfs-ollamarepo_h800
+  namespace: ai-training
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-ollamarepo_h800
+  template:
+    metadata:
+      labels:
+        app: nfs-ollamarepo_h800
+    spec:
+      containers:
+      - image: ollama/ollama:latest
+        imagePullPolicy: "IfNotPresent"
+        name: ollamarepo
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /root/.ollama
+            #subPath: cit
+      volumes:
+        - name: nfs-chqsit
+          hostPath:
+            path: /data/ollama/training
+

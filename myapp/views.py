@@ -1,6 +1,13 @@
 from pathlib import Path
+import os
+import re
 import secrets
-import subprocess
+import time
+
+import yaml
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
+from kubernetes.config.config_exception import ConfigException
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -14,12 +21,13 @@ from django.views.decorators.http import require_POST
 from myapp.models import TrainingContainer, budget, pr
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent / "ai_containers"
+KUBE_NAMESPACE = os.environ.get("KUBE_NAMESPACE", "ai-training")
 
-SCRIPT_CHOICES = {
-    "ollama_a100": SCRIPT_DIR / "ollama_a100.sh",
-    "ollama_h800": SCRIPT_DIR / "ollama_h800.sh",
-    "ollama_rtx5090": SCRIPT_DIR / "ollama_rtx5090.sh",
+TEMPLATE_DIR = Path(__file__).resolve().parent / "ai_containers"
+POD_TEMPLATE_FILES = {
+    "ollama_a100": TEMPLATE_DIR / "ollama_a100.yaml",
+    "ollama_h800": TEMPLATE_DIR / "ollama_h800.yaml",
+    "ollama_rtx5090": TEMPLATE_DIR / "ollama_rtx5090.yaml",
 }
 
 ACTION_LABELS = {
@@ -29,15 +37,83 @@ ACTION_LABELS = {
 }
 
 
-def _parse_kv_output(text):
-    data = {}
-    for raw_line in (text or "").splitlines():
-        line = raw_line.strip()
-        if not line or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        data[k.strip()] = v.strip()
-    return data
+def _load_k8s_api():
+    try:
+        config.load_incluster_config()
+    except ConfigException:
+        config.load_kube_config()
+    return client.CoreV1Api()
+
+
+def _safe_pod_suffix(username):
+    safe = re.sub(r"[^a-z0-9.-]", "-", username.lower()).strip("-.")
+    return safe or "anon"
+
+
+def _build_pod_name(profile_key, username):
+    suffix = secrets.token_hex(4)
+    base = f"ollama-{profile_key}-{_safe_pod_suffix(username)}-{suffix}"
+    return base[:63].rstrip("-")
+
+
+def _load_pod_template(profile_key, username):
+    template_path = POD_TEMPLATE_FILES.get(profile_key)
+    if not template_path:
+        raise ValueError("Please select a valid profile.")
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"Pod template not found: {template_path}")
+
+    manifest = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise ValueError("Invalid YAML pod template.")
+
+    pod_name = _build_pod_name(profile_key, username)
+
+    metadata = manifest.setdefault("metadata", {})
+    metadata["name"] = pod_name
+    metadata["namespace"] = KUBE_NAMESPACE
+    labels = metadata.setdefault("labels", {})
+    labels["app"] = "training"
+    labels["profile"] = profile_key
+    labels["owner"] = username.lower()
+
+    spec = manifest.setdefault("spec", {})
+    containers = spec.get("containers") or []
+    if not containers:
+        raise ValueError("Pod template must define at least one container.")
+
+    main_container = containers[0]
+    main_container["name"] = main_container.get("name", "ollama")
+
+    return manifest, pod_name
+
+
+def _wait_for_pod_running(api, pod_name, namespace, timeout_seconds=120):
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            pod = api.read_namespaced_pod(name=pod_name, namespace=namespace)
+            if pod.status and pod.status.phase == "Running":
+                return True
+            if pod.status and pod.status.phase in {"Failed", "Succeeded"}:
+                return False
+        except ApiException:
+            pass
+        time.sleep(2)
+    return False
+
+
+def _delete_pod(api, pod_name, namespace):
+    try:
+        api.delete_namespaced_pod(
+            name=pod_name,
+            namespace=namespace,
+            body=client.V1DeleteOptions(grace_period_seconds=30),
+        )
+    except ApiException as exc:
+        if exc.status != 404:
+            raise
 
 
 def index(request):
@@ -64,9 +140,9 @@ def training_page(request):
         "myapp/training.html",
         {
             "script_options": [
-                ("ollama_a100", "ollama_a100.sh"),
-                ("ollama_h800", "ollama_h800.sh"),
-                ("ollama_rtx5090", "ollama_rtx5090.sh"),
+                ("ollama_a100", "ollama_a100.yaml"),
+                ("ollama_h800", "ollama_h800.yaml"),
+                ("ollama_rtx5090", "ollama_rtx5090.yaml"),
             ],
             "my_active_container": my_active_container,
         },
@@ -88,9 +164,8 @@ def training_run_ollama(request):
 
     try:
         if action == "start":
-            script_path = SCRIPT_CHOICES.get(script_key)
-            if not script_path:
-                messages.error(request, "Please select a valid script for Start.")
+            if script_key not in POD_TEMPLATE_FILES:
+                messages.error(request, "Please select a valid profile.")
                 return redirect("training_page")
 
             owned_active = TrainingContainer.objects.filter(
@@ -100,7 +175,7 @@ def training_run_ollama(request):
             if owned_active:
                 messages.error(
                     request,
-                    f"You already have an active container: {owned_active.docker_name}",
+                    f"You already have an active pod: {owned_active.pod_name}",
                 )
                 return redirect("training_page")
 
@@ -116,7 +191,7 @@ def training_run_ollama(request):
                 )
 
                 if not slot:
-                    messages.error(request, "No free container slot for selected hardware profile.")
+                    messages.error(request, "No free pod slot for selected hardware profile.")
                     return redirect("training_page")
 
                 slot.owner = request.user
@@ -139,41 +214,50 @@ def training_run_ollama(request):
                     ]
                 )
 
-            # SECURITY_NOTE: script path is selected from a fixed server-side allow-list.
-            # SECURITY_NOTE: username is passed as a positional argument list, no shell interpolation.
-            cmd = ["/bin/sh", str(script_path), request.user.username]
-
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-            meta = _parse_kv_output(result.stdout)
-            container_name = meta.get("CONTAINER_NAME", "").strip()
-            host_port_raw = meta.get("HOST_PORT", "").strip()
-
-            if not container_name:
-                raise ValueError("Script did not return CONTAINER_NAME.")
-
             try:
-                host_port = int(host_port_raw)
-            except Exception:
-                raise ValueError("Script did not return valid HOST_PORT.")
+                api = _load_k8s_api()
+                manifest, pod_name = _load_pod_template(script_key, request.user.username)
 
-            slot.docker_name = container_name
-            slot.host_port = host_port
-            slot.status = TrainingContainer.Status.RUNNING
-            slot.started_at = timezone.now()
-            slot.save(update_fields=["docker_name", "host_port", "status", "started_at", "updated_at"])
+                api.create_namespaced_pod(
+                    namespace=KUBE_NAMESPACE,
+                    body=manifest,
+                )
 
-            label = ACTION_LABELS.get(action, action)
-            messages.success(
-                request,
-                f"{label} completed. Container: {slot.docker_name}, Port: {slot.host_port}",
-            )
+                if not _wait_for_pod_running(api, pod_name, KUBE_NAMESPACE, timeout_seconds=120):
+                    slot.status = TrainingContainer.Status.ERROR
+                    slot.save(update_fields=["status", "updated_at"])
+                    messages.error(request, "Pod failed to reach Running state.")
+                    return redirect("training_page")
+
+                slot.pod_name = pod_name
+                slot.host_port = None
+                slot.status = TrainingContainer.Status.RUNNING
+                slot.started_at = timezone.now()
+                slot.save(
+                    update_fields=[
+                        "pod_name",
+                        "host_port",
+                        "status",
+                        "started_at",
+                        "updated_at",
+                    ]
+                )
+
+                label = ACTION_LABELS.get(action, action)
+                messages.success(
+                    request,
+                    f"{label} completed. Pod: {slot.pod_name}",
+                )
+
+            except ApiException as e:
+                slot.status = TrainingContainer.Status.ERROR
+                slot.save(update_fields=["status", "updated_at"])
+                messages.error(request, f"Kubernetes API error: {e.reason}")
+
+            except Exception as e:
+                slot.status = TrainingContainer.Status.ERROR
+                slot.save(update_fields=["status", "updated_at"])
+                messages.error(request, f"Unexpected error: {str(e)}")
 
         elif action == "stop":
             mine = TrainingContainer.objects.filter(
@@ -181,74 +265,65 @@ def training_run_ollama(request):
                 status__in=[TrainingContainer.Status.STARTING, TrainingContainer.Status.RUNNING],
             ).first()
             if not mine:
-                messages.error(request, "You do not have a running container to stop.")
+                messages.error(request, "You do not have a running pod to stop.")
                 return redirect("training_page")
 
-            cmd = ["docker", "stop", mine.docker_name]
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=45,
-            )
+            try:
+                api = _load_k8s_api()
+                _delete_pod(api, mine.pod_name, KUBE_NAMESPACE)
 
-            mine.status = TrainingContainer.Status.STOPPED
-            mine.stopped_at = timezone.now()
-            mine.save(update_fields=["status", "stopped_at", "updated_at"])
+                mine.status = TrainingContainer.Status.STOPPED
+                mine.stopped_at = timezone.now()
+                mine.save(update_fields=["status", "stopped_at", "updated_at"])
 
-            out = (result.stdout or "").strip()
-            if out:
-                messages.success(request, f"{ACTION_LABELS['stop']} completed. Output: {out}")
-            else:
                 messages.success(request, f"{ACTION_LABELS['stop']} completed.")
+
+            except ApiException as e:
+                messages.error(request, f"Kubernetes API error: {e.reason}")
+
+            except Exception as e:
+                messages.error(request, f"Unexpected error: {str(e)}")
 
         else:
             mine = TrainingContainer.objects.filter(owner=request.user).first()
             if not mine:
-                messages.error(request, "You do not own any container to remove.")
+                messages.error(request, "You do not own any pod to remove.")
                 return redirect("training_page")
 
-            cmd = ["docker", "rm", "-f", mine.docker_name]
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=45,
-            )
+            try:
+                api = _load_k8s_api()
+                _delete_pod(api, mine.pod_name, KUBE_NAMESPACE)
 
-            mine.status = TrainingContainer.Status.FREE
-            mine.owner = None
-            mine.host_port = None
-            mine.token_nonce = ""
-            mine.allocated_at = None
-            mine.started_at = None
-            mine.stopped_at = timezone.now()
-            mine.save(
-                update_fields=[
-                    "status",
-                    "owner",
-                    "host_port",
-                    "token_nonce",
-                    "allocated_at",
-                    "started_at",
-                    "stopped_at",
-                    "updated_at",
-                ]
-            )
+                mine.status = TrainingContainer.Status.FREE
+                mine.owner = None
+                mine.host_port = None
+                mine.token_nonce = ""
+                mine.allocated_at = None
+                mine.started_at = None
+                mine.stopped_at = timezone.now()
+                mine.save(
+                    update_fields=[
+                        "status",
+                        "owner",
+                        "host_port",
+                        "token_nonce",
+                        "allocated_at",
+                        "started_at",
+                        "stopped_at",
+                        "updated_at",
+                    ]
+                )
 
-            out = (result.stdout or "").strip()
-            if out:
-                messages.success(request, f"{ACTION_LABELS['remove']} completed. Output: {out}")
-            else:
                 messages.success(request, f"{ACTION_LABELS['remove']} completed.")
 
-    except subprocess.TimeoutExpired:
-        messages.error(request, "Command timed out.")
-    except subprocess.CalledProcessError as e:
-        err = (e.stderr or str(e)).strip()
-        messages.error(request, f"Failed to run action: {err}")
+            except ApiException as e:
+                messages.error(request, f"Kubernetes API error: {e.reason}")
+
+            except Exception as e:
+                messages.error(request, f"Unexpected error: {str(e)}")
+
+    except ApiException as e:
+        messages.error(request, f"Kubernetes API error: {e.reason}")
 
         if action == "start":
             failed_slot = TrainingContainer.objects.filter(
@@ -258,6 +333,7 @@ def training_run_ollama(request):
             if failed_slot:
                 failed_slot.status = TrainingContainer.Status.ERROR
                 failed_slot.save(update_fields=["status", "updated_at"])
+
     except Exception as e:
         messages.error(request, f"Unexpected error: {str(e)}")
 
@@ -269,8 +345,6 @@ def training_run_ollama(request):
             if failed_slot:
                 failed_slot.status = TrainingContainer.Status.ERROR
                 failed_slot.save(update_fields=["status", "updated_at"])
-    except FileNotFoundError:
-        messages.error(request, "Docker or shell executable was not found on server.")
 
     return redirect("training_page")
 
@@ -285,14 +359,15 @@ def training_connect_terminal(request):
     ).first()
 
     if not mine:
-        return JsonResponse({"error": "No running container owned by current user."}, status=400)
+        return JsonResponse({"error": "No running pod owned by current user."}, status=400)
 
     token = signing.dumps(
         {
             "container_id": mine.id,
             "user_id": request.user.id,
-            "docker_name": mine.docker_name,
-            "host_port": mine.host_port,
+            "pod_name": mine.pod_name,
+            "pod_namespace": KUBE_NAMESPACE,
+            "pod_container_name": "ollama",
             "nonce": mine.token_nonce,
         },
         salt="xterm-connect",
@@ -302,8 +377,9 @@ def training_connect_terminal(request):
         {
             "ws_url": "/ws/training/terminal/",
             "token": token,
-            "container_name": mine.docker_name,
-            "host_port": mine.host_port,
+            "pod_name": mine.pod_name,
+            "pod_namespace": KUBE_NAMESPACE,
+            "pod_container_name": "ollama",
         }
     )
 

@@ -203,7 +203,7 @@
 
     {% if my_active_container %}
       <div class="msg" style="color: #1b5e20; font-weight: bold;">
-        Your active container: {{ my_active_container.docker_name }} ({{ my_active_container.profile }}) Port: {{ my_active_container.host_port }}
+        Your active pod: {{ my_active_container.pod_name }} ({{ my_active_container.profile }}) Port: {{ my_active_container.host_port }}
       </div>
     {% endif %}
 
@@ -221,9 +221,9 @@
       </div>
 
       <div class="row">
-        <label for="script_choice">Script (used when Action=Start)</label>
+        <label for="script_choice">Profile (used when Action=Start)</label>
         <select id="script_choice" name="script_choice">
-          <option value="">Select script</option>
+          <option value="">Select profile</option>
           {% for value, label in script_options %}
             <option value="{{ value }}">{{ label }}</option>
           {% endfor %}
@@ -252,6 +252,20 @@
       const parts = v.split("; " + name + "=");
       if (parts.length === 2) return parts.pop().split(";").shift();
       return "";
+    }
+
+    function buildWebSocketBaseUrl() {
+      const scheme = location.protocol === "https:" ? "wss" : "ws";
+
+      if (location.port === "32068") {
+        return scheme + "://" + location.hostname + ":32069";
+      }
+
+      if (location.port) {
+        return scheme + "://" + location.host;
+      }
+
+      return scheme + "://" + location.host;
     }
 
     const actionEl = document.getElementById("action");
@@ -452,17 +466,15 @@
         }
 
         const data = await res.json();
-
-        const scheme = location.protocol === "https:" ? "wss" : "ws";
-        const wsHost = location.hostname + ":8001";
-        const wsUrl = scheme + "://" + wsHost + data.ws_url + "?token=" + encodeURIComponent(data.token);
+        const wsBaseUrl = buildWebSocketBaseUrl();
+        const wsUrl = wsBaseUrl + data.ws_url + "?token=" + encodeURIComponent(data.token);
 
         const ws = new WebSocket(wsUrl);
         session.ws = ws;
 
         ws.onopen = function () {
           status.textContent = "Connected";
-          term.write("\r\nConnected to ollama shell\r\n");
+          term.write("\r\nConnected to pod shell\r\n");
           fitAddon.fit();
         };
 
