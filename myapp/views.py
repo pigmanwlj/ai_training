@@ -52,7 +52,8 @@ def _safe_pod_suffix(username):
 
 def _build_pod_name(profile_key, username):
     suffix = secrets.token_hex(4)
-    base = f"ollama-{profile_key}-{_safe_pod_suffix(username)}-{suffix}"
+    safe_profile = profile_key.replace("_", "-")
+    base = f"ollama-{safe_profile}-{_safe_pod_suffix(username)}-{suffix}"
     return base[:63].rstrip("-")
 
 
@@ -114,6 +115,13 @@ def _delete_pod(api, pod_name, namespace):
     except ApiException as exc:
         if exc.status != 404:
             raise
+
+
+def _format_api_exception(exc):
+    body = getattr(exc, "body", None)
+    if body:
+        return f"{exc.reason}: {body}"
+    return str(exc.reason or exc)
 
 
 def index(request):
@@ -252,7 +260,7 @@ def training_run_ollama(request):
             except ApiException as e:
                 slot.status = TrainingContainer.Status.ERROR
                 slot.save(update_fields=["status", "updated_at"])
-                messages.error(request, f"Kubernetes API error: {e.reason}")
+                messages.error(request, f"Kubernetes API error: {_format_api_exception(e)}")
 
             except Exception as e:
                 slot.status = TrainingContainer.Status.ERROR
@@ -279,7 +287,7 @@ def training_run_ollama(request):
                 messages.success(request, f"{ACTION_LABELS['stop']} completed.")
 
             except ApiException as e:
-                messages.error(request, f"Kubernetes API error: {e.reason}")
+                messages.error(request, f"Kubernetes API error: {_format_api_exception(e)}")
 
             except Exception as e:
                 messages.error(request, f"Unexpected error: {str(e)}")
@@ -317,13 +325,13 @@ def training_run_ollama(request):
                 messages.success(request, f"{ACTION_LABELS['remove']} completed.")
 
             except ApiException as e:
-                messages.error(request, f"Kubernetes API error: {e.reason}")
+                messages.error(request, f"Kubernetes API error: {_format_api_exception(e)}")
 
             except Exception as e:
                 messages.error(request, f"Unexpected error: {str(e)}")
 
     except ApiException as e:
-        messages.error(request, f"Kubernetes API error: {e.reason}")
+        messages.error(request, f"Kubernetes API error: {_format_api_exception(e)}")
 
         if action == "start":
             failed_slot = TrainingContainer.objects.filter(
