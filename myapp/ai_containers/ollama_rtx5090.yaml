@@ -32,11 +32,11 @@ spec:
       #    cpu: "8"
       #    memory: "32Gi"
       #    nvidia.com/gpu: "1"
-      volumeMounts:
-        - name: host-chqsit
-          mountPath: /root/.ollama
-  volumes:
-    - name: host-chqsit
-      hostPath:
-        path: /data/ollama/training
+#      volumeMounts:
+#        - name: host-chqsit
+#          mountPath: /root/.ollama
+#  volumes:
+#    - name: host-chqsit
+#      hostPath:
+#        path: /data/ollama/training
 
