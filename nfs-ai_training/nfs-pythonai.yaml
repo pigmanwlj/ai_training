@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-pythonai
+  name: nfs-pythonai
+  namespace: ai-training
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-pythonai
+  template:
+    metadata:
+      labels:
+        app: nfs-pythonai
+    spec:
+      serviceAccountName: pythonai-sa
+      containers:
+      - image: pigmanwlj/python-cit020:latest
+        imagePullPolicy: "IfNotPresent"
+        name: pythonai
+        ports:
+        - containerPort: 8000
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /cit
+            #subPath: cit
+          - name: kube
+            mountPath: /root/.kube
+          - name: kubelet-pki
+            mountPath: /var/lib/kubelet/pki
+          - name: kubectl
+            mountPath: /usr/bin/kubectl
+      - image: pigmanwlj/python-cit020:latest
+        imagePullPolicy: "IfNotPresent"
+        name: pythonai-daphne
+        ports:
+        - containerPort: 8001
+        command: ["/bin/sh", "-c", "/opt/venv/bin/python -m daphne -b 0.0.0.0 -p 8001 cit.asgi:application"]
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /cit
+            #subPath: cit
+          - name: kube
+            mountPath: /root/.kube
+          - name: kubelet-pki
+            mountPath: /var/lib/kubelet/pki
+          - name: kubectl
+            mountPath: /usr/bin/kubectl
+      volumes:
+        - name: nfs-chqsit
+          hostPath:
+            path: /data/ai_training
+        - name: kube
+          hostPath:
+            path: /root/.kube
+        - name: kubelet-pki
+          hostPath:
+            path: /var/lib/kubelet/pki
+        - name: kubectl
+          hostPath:
+            path: /usr/bin/kubectl
+

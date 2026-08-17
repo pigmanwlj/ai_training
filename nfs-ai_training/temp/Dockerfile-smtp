@@ -1,0 +1,16 @@
+FROM docker.app.com.cn/pigmanwlj/python-cit002:pigmanwlj
+USER root
+RUN apt install -y ssmtp mailutils
+RUN apt install -y cron
+
+ENV TZ=Asia/Shanghai
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt install -y tzdata
+RUN ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime
+RUN echo ${TZ} > /etc/timezone
+RUN dpkg-reconfigure --frontend noninteractive tzdata
+RUN rm -rf /var/lib/apt/lists/*
+
+CMD "/bin/sh"
+

@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claim-pythoncit-chqsit
+  namespace: pythoncit
+spec:
+  storageClassName: statefu-chqsit   #sc一定要指向上面创建的sc名称
+  accessModes:
+    - ReadWriteMany   #采用ReadWriteMany的访问模式
+  resources:
+    requests:
+      storage: 5Gi    #请求5Gi的空间
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claim-redis-pythoncit-chqsit
+  namespace: pythoncit
+spec:
+  storageClassName: statefu-chqsit   #sc一定要指向上面创建的sc名称
+  accessModes:
+    - ReadWriteMany   #采用ReadWriteMany的访问模式
+  resources:
+    requests:
+      storage: 5Gi    #请求5Gi的空间
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: claim-pythoncit-2-chqsit
+  namespace: pythoncit
+spec:
+  storageClassName: statefu-chqsit   #sc一定要指向上面创建的sc名称
+  accessModes:
+    - ReadWriteMany   #采用ReadWriteMany的访问模式
+  resources:
+    requests:
+      storage: 5Gi    #请求5Gi的空间
+

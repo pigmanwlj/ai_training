@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-anaconda3
+  name: nfs-anaconda3
+  namespace: anaconda3
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nfs-anaconda3
+  template:
+    metadata:
+      labels:
+        app: nfs-anaconda3
+    spec:
+      containers:
+      - image: docker.app.com.cn/pigmanwlj/anaconda3:pigmanwlj
+        imagePullPolicy: "IfNotPresent"
+        name: anaconda3
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /webt
+            subPath: webt
+      volumes:
+        - name: nfs-chqsit
+          persistentVolumeClaim:   #指定pvc，注意下面声明的pvc指向的是上面定义的pvc名称
+            claimName: claim-anaconda3-chqsit
+

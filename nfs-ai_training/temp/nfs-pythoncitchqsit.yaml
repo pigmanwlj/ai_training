@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-pythoncit
+  name: nfs-pythoncit
+  namespace: pythoncit
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nfs-pythoncit
+  template:
+    metadata:
+      labels:
+        app: nfs-pythoncit
+    spec:
+      containers:
+      - image: docker.app.com.cn/pigmanwlj/python-cit002:pigmanwlj
+        imagePullPolicy: "IfNotPresent"
+        name: pythoncit
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /cit
+            #subPath: cit
+      volumes:
+        - name: nfs-chqsit
+          persistentVolumeClaim:   #指定pvc，注意下面声明的pvc指向的是上面定义的pvc名称
+            claimName: claim-pythoncit-chqsit
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-pythoncit-nginx
+  name: nfs-pythoncit-nginx
+  namespace: pythoncit
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: nfs-pythoncit-nginx
+  template:
+    metadata:
+      labels:
+        app: nfs-pythoncit-nginx
+    spec:
+      containers:
+      - image: docker.app.com.cn/pigmanwlj/nginx:pigmanwlj
+        imagePullPolicy: "IfNotPresent"
+        name: pythoncit-nginx
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /usr/share/nginx/html
+            subPath: html
+          - name: nfs-chqsit
+            mountPath: /etc/nginx/conf.d
+            subPath: conf.d
+      volumes:
+        - name: nfs-chqsit
+          persistentVolumeClaim:   #指定pvc，注意下面声明的pvc指向的是上面定义的pvc名称
+            claimName: claim-pythoncit-chqsit
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-redis-pythoncit
+  name: nfs-redis-pythoncit
+  namespace: pythoncit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-redis-pythoncit
+  template:
+    metadata:
+      labels:
+        app: nfs-redis-pythoncit
+    spec:
+      containers:
+      - image: docker.app.com.cn/pigmanwlj/redis:pigmanwlj
+        imagePullPolicy: "IfNotPresent"
+        name: redis
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /data
+        resources:
+          limits:
+            cpu: 4000m
+            memory: 8000Mi
+          requests:
+            cpu: 2000m
+            memory: 4000Mi
+      volumes:
+        - name: nfs-chqsit
+          persistentVolumeClaim:   #指定pvc，注意下面声明的pvc指向的是上面定义的pvc名称
+            claimName: claim-redis-pythoncit-chqsit
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nfs-pythoncit-smtp
+  name: nfs-pythoncit-smtp
+  namespace: pythoncit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nfs-pythoncit-smtp
+  template:
+    metadata:
+      labels:
+        app: nfs-pythoncit-smtp
+    spec:
+      containers:
+      - image: docker.app.com.cn/pigmanwlj/python-smtp002:pigmanwlj
+        imagePullPolicy: "IfNotPresent"
+        name: pythoncit-smtp
+        command: ["/usr/sbin/cron", "-f"]
+        #args: ["/usr/sbin/cron;"]
+        env:
+        - name: TZ
+          value: Asia/Shanghai
+        volumeMounts:    #定义数据持久化
+          - name: nfs-chqsit
+            mountPath: /cit
+            subPath: cit
+          - name: nfs-chqsit
+            mountPath: /var/spool/cron/crontabs/root
+            subPath: root
+          #- name: host-chqsit
+          #  mountPath: /etc/timezone
+      volumes:
+        - name: nfs-chqsit
+          persistentVolumeClaim:   #指定pvc，注意下面声明的pvc指向的是上面定义的pvc名称
+            claimName: claim-pythoncit-2-chqsit
+        #- name: host-chqsit
+        #  hostPath:
+        #    path: /etc/timezone
+
