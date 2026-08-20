@@ -2,13 +2,10 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-# Create your models here.
-
 
 class budget(models.Model):
     """自定义budget表对应的Model类"""
 
-    # 定义属性：默认主键自增id字段可不写
     budgetid = models.AutoField("预算序号", primary_key=True)
     budgetyear = models.DecimalField("预算年份", max_digits=4, decimal_places=0)
     budgetowner = models.CharField("负责人", max_length=128, null=True, blank=True)
@@ -24,23 +21,7 @@ class budget(models.Model):
     longcontract = models.BooleanField("是否长期合同", default=False)
     countdraw = models.BooleanField("是否计提", default=False)
     countdrawmoney = models.DecimalField("计提金额(未税)", max_digits=16, decimal_places=2, null=True, blank=True, default=0.00)
-    # pr = models.BooleanField("采购申请")
-    # contractbegin = models.DateField("合同起始", null=True, blank=True)
-    # contractend = models.DateField("合同终止", null=True, blank=True)
-    # checkaccept = models.BooleanField("合同验收")
-    # percentage = models.DecimalField(
-    #     "验收百分比",
-    #     max_digits=5,
-    #     decimal_places=2,
-    #     null=True,
-    #     blank=True,
-    #     default=0.00,
-    #     validators=[MinValueValidator(0.00), MaxValueValidator(100.00)],
-    # )
-    # summary = models.CharField("备注", max_length=128, null=True, blank=True)
-    # attachment = models.FileField("附件", upload_to="uploads/%Y/%m/%d/", null=True, blank=True)
 
-    # 定义默认输出格式
     def __str__(self):
         return "%d:%d:%s:%s:%s:%s:%d:%d:%d:%d:%d" % (
             self.budgetid,
@@ -56,7 +37,6 @@ class budget(models.Model):
             self.countdrawmoney,
         )
 
-    # 自定义对应的表名，默认表名：myapp_budget
     class Meta:
         db_table = "budget"
         verbose_name = "浏览预算数据"
@@ -66,7 +46,6 @@ class budget(models.Model):
 class pr(models.Model):
     """自定义pr表对应的Model类"""
 
-    # 定义属性：默认主键自增id字段可不写
     prid = models.AutoField("采购序号", primary_key=True)
     frombudget = models.ForeignKey("budget", on_delete=models.CASCADE, db_column="budgetid")
     prname = models.CharField("采购名称", max_length=128, default="")
@@ -82,7 +61,6 @@ class pr(models.Model):
         default=0.00,
         validators=[MinValueValidator(0.00), MaxValueValidator(100.00)],
     )
-    # moneywithtax = models.DecimalField("合同金额(含税)", max_digits=16, decimal_places=2, null=True, blank=True, editable=False)
     checkaccept = models.BooleanField("合同验收", default=False)
     percentage = models.DecimalField(
         "验收比例",
@@ -94,7 +72,6 @@ class pr(models.Model):
     paymentplan = models.TextField("使用计划", null=True, blank=True, default="暂时无计划")
     attachment = models.FileField("合同附件", upload_to="uploads/%Y/%m/%d/", null=True, blank=True)
 
-    # 定义默认输出格式
     def __str__(self):
         return "%d:%s:%s:%d:%d:%s:%s:%d:%d:%d:%d:%s:%s" % (
             self.prid,
@@ -112,7 +89,6 @@ class pr(models.Model):
             self.attachment,
         )
 
-    # 自定义对应的表名，默认表名：myapp_pr
     class Meta:
         db_table = "pr"
         verbose_name = "浏览采购数据"
@@ -159,6 +135,38 @@ class TrainingContainer(models.Model):
         db_table = "training_container"
         verbose_name = "训练容器"
         verbose_name_plural = "训练容器"
+
+
+class PodUsageSession(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pod_usage_sessions",
+        verbose_name="用户",
+    )
+    profile = models.CharField("硬件配置", max_length=32, choices=TrainingContainer.Profile.choices)
+    pod_name = models.CharField("容器名", max_length=128)
+    container = models.ForeignKey(
+        TrainingContainer,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="usage_sessions",
+        verbose_name="训练容器",
+    )
+    started_at = models.DateTimeField("开始时间")
+    stopped_at = models.DateTimeField("结束时间", null=True, blank=True)
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return f"{self.user}:{self.profile}:{self.pod_name}:{self.started_at}:{self.stopped_at or 'open'}"
+
+    class Meta:
+        db_table = "pod_usage_session"
+        verbose_name = "Pod 使用记录"
+        verbose_name_plural = "Pod 使用记录"
+        ordering = ("-started_at",)
 
 
 class training_platform(TrainingContainer):

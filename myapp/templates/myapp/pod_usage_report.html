@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pod Usage Report</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --text: #102033;
+      --muted: #5d6b82;
+      --line: #d9e1ec;
+      --accent: #1f6feb;
+      --accent-2: #0f9d58;
+      --warn: #b45309;
+      --shadow: 0 12px 40px rgba(16, 32, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(31, 111, 235, 0.10), transparent 34%),
+        radial-gradient(circle at top right, rgba(15, 157, 88, 0.09), transparent 30%),
+        var(--bg);
+    }
+
+    .page {
+      width: min(1480px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f1c33 0%, #183b71 48%, #1f6feb 100%);
+      color: #fff;
+      padding: 28px;
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.1;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 880px;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .toolbar,
+    .summary-grid,
+    .table-card {
+      margin-top: 18px;
+    }
+
+    .toolbar,
+    .card,
+    .table-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      padding: 18px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 220px;
+    }
+
+    .field label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .field select,
+    .field input {
+      padding: 11px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      border-color: var(--line);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      min-height: 118px;
+    }
+
+    .card .label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .card .value {
+      margin-top: 10px;
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .card .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .table-card {
+      overflow: hidden;
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+    }
+
+    .table-header h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .table-header .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f7faff;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    tr:hover td {
+      background: #f9fbff;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eaf2ff;
+      color: #1848a0;
+      white-space: nowrap;
+    }
+
+    .pill.green {
+      background: #e8f8ee;
+      color: #0f7b44;
+    }
+
+    .pill.gold {
+      background: #fff4de;
+      color: #8f5a00;
+    }
+
+    .empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1100px) {
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .actions {
+        margin-left: 0;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        width: min(100vw - 20px, 1480px);
+        margin: 10px auto 24px;
+      }
+
+      .hero,
+      .toolbar,
+      .card,
+      .table-header {
+        border-radius: 14px;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .field {
+        min-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <h1>Pod Usage Report</h1>
+      <p>
+        This page is meant to show how much time each user has consumed for each pod profile.
+        The view should pass aggregated rows grouped by user and pod type, plus summary totals for the page header.
+      </p>
+    </section>
+
+    <form class="toolbar" method="get">
+      <div class="field">
+        <label for="user">User</label>
+        <select id="user" name="user">
+          <option value="">All users</option>
+          {% for value, label in user_options %}
+            <option value="{{ value }}" {% if selected_user == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="profile">Pod Type</label>
+        <select id="profile" name="profile">
+          <option value="">All profiles</option>
+          {% for value, label in profile_options %}
+            <option value="{{ value }}" {% if selected_profile == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="start">Start Date</label>
+        <input id="start" name="start" type="date" value="{{ start_date|default_if_none:'' }}">
+      </div>
+
+      <div class="field">
+        <label for="end">End Date</label>
+        <input id="end" name="end" type="date" value="{{ end_date|default_if_none:'' }}">
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" type="submit">Apply Filters</button>
+        <a class="btn btn-secondary" href="{% url 'training_usage_report' %}">Reset</a>
+      </div>
+    </form>
+
+    <section class="summary-grid">
+      <article class="card">
+        <div class="label">Total Users</div>
+        <div class="value">{{ summary.total_users|default:0 }}</div>
+        <div class="hint">Distinct users with usage in the selected period.</div>
+      </article>
+
+      <article class="card">
+        <div class="label">Total Sessions</div>
+        <div class="value">{{ summary.total_sessions|default:0 }}</div>
+        <div class="hint">Count of completed or tracked pod sessions.</div>
+      </article>
+
+      <article class="card">
+        <div class="label">Total Runtime</div>
+        <div class="value">{{ summary.total_runtime_display|default:"0h 0m" }}</div>
+        <div class="hint">Sum of all usage time across pod profiles.</div>
+      </article>
+
+      <article class="card">
+        <div class="label">Last Update</div>
+        <div class="value" style="font-size: 20px;">{{ generated_at|default:"N/A" }}</div>
+        <div class="hint">Timestamp when this report was generated.</div>
+      </article>
+    </section>
+
+    <section class="table-card">
+      <div class="table-header">
+        <div>
+          <h2>Usage Breakdown</h2>
+          <div class="meta">Each row should represent one user and one pod profile total.</div>
+        </div>
+        <div class="pill green">{{ report_rows|length|default:0 }} rows</div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Pod Type</th>
+              <th>Sessions</th>
+              <th>Total Runtime</th>
+              <th>Average Session</th>
+              <th>Last Used At</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if report_rows %}
+              {% for row in report_rows %}
+                <tr>
+                  <td>
+                    <strong>{{ row.username }}</strong><br>
+                    <span style="color: var(--muted); font-size: 13px;">{{ row.full_name|default:"-" }}</span>
+                  </td>
+                  <td><span class="pill">{{ row.profile_label }}</span></td>
+                  <td>{{ row.session_count }}</td>
+                  <td><strong>{{ row.total_runtime_display }}</strong></td>
+                  <td>{{ row.avg_runtime_display }}</td>
+                  <td>{{ row.last_used_at|default:"-" }}</td>
+                  <td>{{ row.note|default:"" }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="7">
+                  <div class="empty">
+                    No usage rows yet. Once the backend records pod sessions and aggregates them, the report will appear here.
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="footer-note">
+      Wiring note: this template expects a view to pass <strong>report_rows</strong>, <strong>summary</strong>,
+      <strong>user_options</strong>, <strong>profile_options</strong>, <strong>selected_user</strong>,
+      <strong>selected_profile</strong>, <strong>start_date</strong>, <strong>end_date</strong>, and <strong>generated_at</strong>.
+    </div>
+  </div>
+</body>
+</html>
+

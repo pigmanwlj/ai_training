@@ -13,12 +13,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core import signing
 from django.db import transaction
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Sum
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from myapp.models import TrainingContainer, budget, pr
+from myapp.models import PodUsageSession, TrainingContainer, budget, pr
 
 
 KUBE_NAMESPACE = os.environ.get("KUBE_NAMESPACE", "ai-training")
@@ -124,6 +125,50 @@ def _format_api_exception(exc):
     return str(exc.reason or exc)
 
 
+def _format_duration(value):
+    if not value:
+        return "0h 0m"
+
+    total_seconds = int(value.total_seconds()) if hasattr(value, "total_seconds") else int(value)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes = remainder // 60
+    return f"{hours}h {minutes}m"
+
+
+def _close_usage_session(container, stopped_at=None):
+    if not container or not container.owner_id:
+        return
+
+    session = (
+        PodUsageSession.objects.filter(
+            user=container.owner,
+            profile=container.profile,
+            pod_name=container.pod_name,
+            container=container,
+            stopped_at__isnull=True,
+        )
+        .order_by("-started_at")
+        .first()
+    )
+
+    if session:
+        session.stopped_at = stopped_at or timezone.now()
+        session.save(update_fields=["stopped_at", "updated_at"])
+
+
+def _open_usage_session(container):
+    if not container or not container.owner_id:
+        return
+
+    PodUsageSession.objects.create(
+        user=container.owner,
+        profile=container.profile,
+        pod_name=container.pod_name,
+        container=container,
+        started_at=container.started_at or timezone.now(),
+    )
+
+
 def index(request):
     return HttpResponse("Hello, world. You're at the myapp index.")
 
@@ -153,6 +198,111 @@ def training_page(request):
                 ("ollama_rtx5090", "ollama_rtx5090.yaml"),
             ],
             "my_active_container": my_active_container,
+        },
+    )
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def training_usage_report(request):
+    selected_user = request.GET.get("user", "").strip()
+    selected_profile = request.GET.get("profile", "").strip()
+    start_date = request.GET.get("start", "").strip()
+    end_date = request.GET.get("end", "").strip()
+
+    report_qs = PodUsageSession.objects.select_related("user").all()
+
+    if selected_user:
+        report_qs = report_qs.filter(user__username=selected_user)
+
+    if selected_profile:
+        report_qs = report_qs.filter(profile=selected_profile)
+
+    if start_date:
+        report_qs = report_qs.filter(started_at__date__gte=start_date)
+
+    if end_date:
+        report_qs = report_qs.filter(started_at__date__lte=end_date)
+
+    report_qs = report_qs.annotate(
+        runtime=ExpressionWrapper(F("stopped_at") - F("started_at"), output_field=DurationField())
+    )
+
+    profile_labels = dict(TrainingContainer.Profile.choices)
+
+    grouped_rows = (
+        report_qs.values("user__username", "user__first_name", "user__last_name", "profile")
+        .annotate(
+            session_count=Count("id"),
+            total_runtime=Sum("runtime"),
+            avg_runtime=Avg("runtime"),
+            last_used_at=Max("stopped_at"),
+        )
+        .order_by("user__username", "profile")
+    )
+
+    report_rows = []
+    distinct_users = set()
+    total_sessions = 0
+    total_runtime_seconds = 0
+
+    for row in grouped_rows:
+        total_runtime = row["total_runtime"]
+        avg_runtime = row["avg_runtime"]
+        username = row["user__username"]
+
+        report_rows.append(
+            {
+                "username": username,
+                "full_name": " ".join(
+                    part for part in [row["user__first_name"], row["user__last_name"]] if part
+                ),
+                "profile_label": profile_labels.get(row["profile"], row["profile"]),
+                "session_count": row["session_count"] or 0,
+                "total_runtime_display": _format_duration(total_runtime),
+                "avg_runtime_display": _format_duration(avg_runtime),
+                "last_used_at": timezone.localtime(row["last_used_at"]).strftime("%Y-%m-%d %H:%M")
+                if row["last_used_at"]
+                else "-",
+                "note": "",
+            }
+        )
+
+        distinct_users.add(username)
+        total_sessions += row["session_count"] or 0
+        if total_runtime:
+            total_runtime_seconds += int(total_runtime.total_seconds())
+
+    summary = {
+        "total_users": len(distinct_users),
+        "total_sessions": total_sessions,
+        "total_runtime_display": _format_duration(total_runtime_seconds),
+    }
+
+    user_options = [
+        (username, username)
+        for username in (
+            PodUsageSession.objects.exclude(user__username__isnull=True)
+            .exclude(user__username__exact="")
+            .values_list("user__username", flat=True)
+            .distinct()
+            .order_by("user__username")
+        )
+    ]
+
+    return render(
+        request,
+        "myapp/pod_usage_report.html",
+        {
+            "report_rows": report_rows,
+            "summary": summary,
+            "user_options": user_options,
+            "profile_options": TrainingContainer.Profile.choices,
+            "selected_user": selected_user,
+            "selected_profile": selected_profile,
+            "start_date": start_date,
+            "end_date": end_date,
+            "generated_at": timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M"),
         },
     )
 
@@ -251,6 +401,8 @@ def training_run_ollama(request):
                     ]
                 )
 
+                _open_usage_session(slot)
+
                 label = ACTION_LABELS.get(action, action)
                 messages.success(
                     request,
@@ -284,6 +436,8 @@ def training_run_ollama(request):
                 mine.stopped_at = timezone.now()
                 mine.save(update_fields=["status", "stopped_at", "updated_at"])
 
+                _close_usage_session(mine, mine.stopped_at)
+
                 messages.success(request, f"{ACTION_LABELS['stop']} completed.")
 
             except ApiException as e:
@@ -300,7 +454,11 @@ def training_run_ollama(request):
 
             try:
                 api = _load_k8s_api()
+
                 _delete_pod(api, mine.pod_name, KUBE_NAMESPACE)
+
+                mine.stopped_at = timezone.now()
+                _close_usage_session(mine, mine.stopped_at)
 
                 mine.status = TrainingContainer.Status.FREE
                 mine.owner = None
@@ -308,7 +466,6 @@ def training_run_ollama(request):
                 mine.token_nonce = ""
                 mine.allocated_at = None
                 mine.started_at = None
-                mine.stopped_at = timezone.now()
                 mine.save(
                     update_fields=[
                         "status",

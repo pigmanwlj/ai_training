@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.shortcuts import redirect
 from import_export.admin import ImportExportModelAdmin
 
-from .models import TrainingContainer, budget, pr, training_platform
+from .models import PodUsageSession, TrainingContainer, budget, pr, training_platform
 from .resource import budgetResource
 
 
@@ -127,4 +127,21 @@ class TrainingContainerAdmin(admin.ModelAdmin):
     list_filter = ("profile", "status")
     search_fields = ("slot_name", "pod_name", "owner__username")
     readonly_fields = ("allocated_at", "started_at", "stopped_at", "updated_at", "token_nonce")
+
+
+@admin.register(PodUsageSession)
+class PodUsageSessionAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "profile",
+        "pod_name",
+        "container",
+        "started_at",
+        "stopped_at",
+        "created_at",
+        "updated_at",
+    )
+    list_filter = ("profile", "started_at", "stopped_at")
+    search_fields = ("user__username", "pod_name", "container__pod_name")
+    readonly_fields = ("created_at", "updated_at")
 
