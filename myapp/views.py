@@ -13,7 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core import signing
 from django.db import transaction
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Sum
+from django.db.models import Avg, Count, Max, Sum
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -136,24 +136,20 @@ def _format_duration(value):
 
 
 def _close_usage_session(container, stopped_at=None):
-    if not container or not container.owner_id:
+    if not container:
         return
 
     session = (
-        PodUsageSession.objects.filter(
-            user=container.owner,
-            profile=container.profile,
-            pod_name=container.pod_name,
-            container=container,
-            stopped_at__isnull=True,
-        )
+        container.usage_sessions.filter(stopped_at__isnull=True)
         .order_by("-started_at")
         .first()
     )
 
     if session:
         session.stopped_at = stopped_at or timezone.now()
-        session.save(update_fields=["stopped_at", "updated_at"])
+        if session.started_at and session.stopped_at:
+            session.elapsed_time = session.stopped_at - session.started_at
+        session.save(update_fields=["stopped_at", "elapsed_time", "updated_at"])
 
 
 def _open_usage_session(container):
@@ -210,7 +206,11 @@ def training_usage_report(request):
     start_date = request.GET.get("start", "").strip()
     end_date = request.GET.get("end", "").strip()
 
-    report_qs = PodUsageSession.objects.select_related("user").all()
+    report_qs = PodUsageSession.objects.select_related("user", "container").filter(
+        started_at__isnull=False,
+        stopped_at__isnull=False,
+        elapsed_time__isnull=False,
+    )
 
     if selected_user:
         report_qs = report_qs.filter(user__username=selected_user)
@@ -224,18 +224,20 @@ def training_usage_report(request):
     if end_date:
         report_qs = report_qs.filter(started_at__date__lte=end_date)
 
-    report_qs = report_qs.annotate(
-        runtime=ExpressionWrapper(F("stopped_at") - F("started_at"), output_field=DurationField())
-    )
-
-    profile_labels = dict(TrainingContainer.Profile.choices)
+    profile_choices = list(TrainingContainer.Profile.choices)
+    profile_labels = dict(profile_choices)
 
     grouped_rows = (
-        report_qs.values("user__username", "user__first_name", "user__last_name", "profile")
+        report_qs.values(
+            "user__username",
+            "user__first_name",
+            "user__last_name",
+            "profile",
+        )
         .annotate(
             session_count=Count("id"),
-            total_runtime=Sum("runtime"),
-            avg_runtime=Avg("runtime"),
+            total_elapsed=Sum("elapsed_time"),
+            avg_elapsed=Avg("elapsed_time"),
             last_used_at=Max("stopped_at"),
         )
         .order_by("user__username", "profile")
@@ -244,23 +246,22 @@ def training_usage_report(request):
     report_rows = []
     distinct_users = set()
     total_sessions = 0
-    total_runtime_seconds = 0
+    total_elapsed_seconds = 0
 
     for row in grouped_rows:
-        total_runtime = row["total_runtime"]
-        avg_runtime = row["avg_runtime"]
-        username = row["user__username"]
+        total_elapsed = row["total_elapsed"]
+        avg_elapsed = row["avg_elapsed"]
 
         report_rows.append(
             {
-                "username": username,
+                "username": row["user__username"],
                 "full_name": " ".join(
                     part for part in [row["user__first_name"], row["user__last_name"]] if part
                 ),
                 "profile_label": profile_labels.get(row["profile"], row["profile"]),
                 "session_count": row["session_count"] or 0,
-                "total_runtime_display": _format_duration(total_runtime),
-                "avg_runtime_display": _format_duration(avg_runtime),
+                "total_elapsed_display": _format_duration(total_elapsed),
+                "avg_elapsed_display": _format_duration(avg_elapsed),
                 "last_used_at": timezone.localtime(row["last_used_at"]).strftime("%Y-%m-%d %H:%M")
                 if row["last_used_at"]
                 else "-",
@@ -268,15 +269,15 @@ def training_usage_report(request):
             }
         )
 
-        distinct_users.add(username)
+        distinct_users.add(row["user__username"])
         total_sessions += row["session_count"] or 0
-        if total_runtime:
-            total_runtime_seconds += int(total_runtime.total_seconds())
+        if total_elapsed:
+            total_elapsed_seconds += int(total_elapsed.total_seconds())
 
     summary = {
         "total_users": len(distinct_users),
         "total_sessions": total_sessions,
-        "total_runtime_display": _format_duration(total_runtime_seconds),
+        "total_elapsed_display": _format_duration(total_elapsed_seconds),
     }
 
     user_options = [
@@ -297,7 +298,7 @@ def training_usage_report(request):
             "report_rows": report_rows,
             "summary": summary,
             "user_options": user_options,
-            "profile_options": TrainingContainer.Profile.choices,
+            "profile_options": profile_choices,
             "selected_user": selected_user,
             "selected_profile": selected_profile,
             "start_date": start_date,
@@ -454,7 +455,6 @@ def training_run_ollama(request):
 
             try:
                 api = _load_k8s_api()
-
                 _delete_pod(api, mine.pod_name, KUBE_NAMESPACE)
 
                 mine.stopped_at = timezone.now()

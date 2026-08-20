@@ -156,6 +156,7 @@ class PodUsageSession(models.Model):
     )
     started_at = models.DateTimeField("开始时间")
     stopped_at = models.DateTimeField("结束时间", null=True, blank=True)
+    elapsed_time = models.DurationField("耗时", null=True, blank=True)
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 
@@ -167,6 +168,13 @@ class PodUsageSession(models.Model):
         verbose_name = "Pod 使用记录"
         verbose_name_plural = "Pod 使用记录"
         ordering = ("-started_at",)
+
+
+class PodUsageReport(PodUsageSession):
+    class Meta:
+        proxy = True
+        verbose_name = "Pod 使用报表"
+        verbose_name_plural = "Pod 使用报表"
 
 
 class training_platform(TrainingContainer):

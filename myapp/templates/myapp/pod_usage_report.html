@@ -302,8 +302,8 @@
     <section class="hero">
       <h1>Pod Usage Report</h1>
       <p>
-        This page is meant to show how much time each user has consumed for each pod profile.
-        The view should pass aggregated rows grouped by user and pod type, plus summary totals for the page header.
+        This page shows filtered pod usage totals by user and pod profile.
+        The summary cards reflect the selected rows on the page.
       </p>
     </section>
 
@@ -354,13 +354,13 @@
       <article class="card">
         <div class="label">Total Sessions</div>
         <div class="value">{{ summary.total_sessions|default:0 }}</div>
-        <div class="hint">Count of completed or tracked pod sessions.</div>
+        <div class="hint">Count of completed pod sessions.</div>
       </article>
 
       <article class="card">
-        <div class="label">Total Runtime</div>
-        <div class="value">{{ summary.total_runtime_display|default:"0h 0m" }}</div>
-        <div class="hint">Sum of all usage time across pod profiles.</div>
+        <div class="label">Total Elapsed Time</div>
+        <div class="value">{{ summary.total_elapsed_display|default:"0h 0m" }}</div>
+        <div class="hint">Sum of elapsed time for the filtered rows.</div>
       </article>
 
       <article class="card">
@@ -374,7 +374,7 @@
       <div class="table-header">
         <div>
           <h2>Usage Breakdown</h2>
-          <div class="meta">Each row should represent one user and one pod profile total.</div>
+          <div class="meta">Each row represents one user and one pod profile total.</div>
         </div>
         <div class="pill green">{{ report_rows|length|default:0 }} rows</div>
       </div>
@@ -386,8 +386,8 @@
               <th>User</th>
               <th>Pod Type</th>
               <th>Sessions</th>
-              <th>Total Runtime</th>
-              <th>Average Session</th>
+              <th>Total Elapsed</th>
+              <th>Average Elapsed</th>
               <th>Last Used At</th>
               <th>Notes</th>
             </tr>
@@ -402,8 +402,8 @@
                   </td>
                   <td><span class="pill">{{ row.profile_label }}</span></td>
                   <td>{{ row.session_count }}</td>
-                  <td><strong>{{ row.total_runtime_display }}</strong></td>
-                  <td>{{ row.avg_runtime_display }}</td>
+                  <td><strong>{{ row.total_elapsed_display }}</strong></td>
+                  <td>{{ row.avg_elapsed_display }}</td>
                   <td>{{ row.last_used_at|default:"-" }}</td>
                   <td>{{ row.note|default:"" }}</td>
                 </tr>
@@ -412,7 +412,7 @@
               <tr>
                 <td colspan="7">
                   <div class="empty">
-                    No usage rows yet. Once the backend records pod sessions and aggregates them, the report will appear here.
+                    No usage rows yet. Once the backend records pod sessions and elapsed time, the report will appear here.
                   </div>
                 </td>
               </tr>
