@@ -119,6 +119,7 @@ class TrainingContainerAdmin(admin.ModelAdmin):
         "owner",
         "status",
         "host_port",
+        "price_per_min",
         "allocated_at",
         "started_at",
         "stopped_at",
