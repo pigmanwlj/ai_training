@@ -140,7 +140,7 @@
 
     .summary-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 16px;
     }
 
@@ -202,7 +202,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 980px;
+      min-width: 1120px;
     }
 
     th,
@@ -303,7 +303,7 @@
       <h1>Pod Usage Report</h1>
       <p>
         This page shows filtered pod usage totals by user and pod profile.
-        The summary cards reflect the selected rows on the page.
+        The summary cards include elapsed time and bill totals for the selected rows.
       </p>
     </section>
 
@@ -364,6 +364,12 @@
       </article>
 
       <article class="card">
+        <div class="label">Total Bill</div>
+        <div class="value">¥{{ summary.total_fee_display|default:"0.00" }}</div>
+        <div class="hint">Calculated from elapsed time and container price per minute.</div>
+      </article>
+
+      <article class="card">
         <div class="label">Last Update</div>
         <div class="value" style="font-size: 20px;">{{ generated_at|default:"N/A" }}</div>
         <div class="hint">Timestamp when this report was generated.</div>
@@ -387,6 +393,7 @@
               <th>Pod Type</th>
               <th>Sessions</th>
               <th>Total Elapsed</th>
+              <th>Total Fee</th>
               <th>Average Elapsed</th>
               <th>Last Used At</th>
               <th>Notes</th>
@@ -403,6 +410,7 @@
                   <td><span class="pill">{{ row.profile_label }}</span></td>
                   <td>{{ row.session_count }}</td>
                   <td><strong>{{ row.total_elapsed_display }}</strong></td>
+                  <td><strong>¥{{ row.total_fee_display }}</strong></td>
                   <td>{{ row.avg_elapsed_display }}</td>
                   <td>{{ row.last_used_at|default:"-" }}</td>
                   <td>{{ row.note|default:"" }}</td>
@@ -410,7 +418,7 @@
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="7">
+                <td colspan="8">
                   <div class="empty">
                     No usage rows yet. Once the backend records pod sessions and elapsed time, the report will appear here.
                   </div>
@@ -425,7 +433,8 @@
     <div class="footer-note">
       Wiring note: this template expects a view to pass <strong>report_rows</strong>, <strong>summary</strong>,
       <strong>user_options</strong>, <strong>profile_options</strong>, <strong>selected_user</strong>,
-      <strong>selected_profile</strong>, <strong>start_date</strong>, <strong>end_date</strong>, and <strong>generated_at</strong>.
+      <strong>selected_profile</strong>, <strong>start_date</strong>, <strong>end_date</strong>, <strong>generated_at</strong>,
+      and a <strong>summary.total_fee_display</strong> value.
     </div>
   </div>
 </body>

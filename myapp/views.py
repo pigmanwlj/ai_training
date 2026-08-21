@@ -1,3 +1,5 @@
+from collections import defaultdict
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import os
 import re
@@ -13,7 +15,6 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core import signing
 from django.db import transaction
-from django.db.models import Avg, Count, Max, Sum
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -135,6 +136,14 @@ def _format_duration(value):
     return f"{hours}h {minutes}m"
 
 
+def _format_currency(value):
+    if value is None:
+        value = Decimal("0.00")
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
+    return format(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
+
+
 def _close_usage_session(container, stopped_at=None):
     if not container:
         return
@@ -227,57 +236,89 @@ def training_usage_report(request):
     profile_choices = list(TrainingContainer.Profile.choices)
     profile_labels = dict(profile_choices)
 
-    grouped_rows = (
-        report_qs.values(
-            "user__username",
-            "user__first_name",
-            "user__last_name",
-            "profile",
-        )
-        .annotate(
-            session_count=Count("id"),
-            total_elapsed=Sum("elapsed_time"),
-            avg_elapsed=Avg("elapsed_time"),
-            last_used_at=Max("stopped_at"),
-        )
-        .order_by("user__username", "profile")
+    report_sessions = report_qs.select_related("user", "container").order_by(
+        "user__username",
+        "profile",
+        "started_at",
+        "id",
     )
 
-    report_rows = []
+    grouped_rows = {}
     distinct_users = set()
     total_sessions = 0
-    total_elapsed_seconds = 0
+    total_elapsed = None
+    total_fee = Decimal("0.00")
 
-    for row in grouped_rows:
-        total_elapsed = row["total_elapsed"]
-        avg_elapsed = row["avg_elapsed"]
+    for session in report_sessions:
+        username = session.user.username if session.user_id else ""
+        first_name = session.user.first_name if session.user_id else ""
+        last_name = session.user.last_name if session.user_id else ""
+        profile = session.profile
+
+        key = (username, first_name, last_name, profile)
+
+        if key not in grouped_rows:
+            grouped_rows[key] = {
+                "username": username,
+                "full_name": " ".join(part for part in [first_name, last_name] if part),
+                "profile": profile,
+                "profile_label": profile_labels.get(profile, profile),
+                "session_count": 0,
+                "total_elapsed": None,
+                "avg_elapsed": None,
+                "last_used_at": None,
+                "total_fee": Decimal("0.00"),
+                "note": "",
+            }
+
+        row = grouped_rows[key]
+        elapsed_time = session.elapsed_time or timezone.timedelta(0)
+        price_per_min = Decimal("0.00")
+        if session.container and session.container.price_per_min is not None:
+            price_per_min = session.container.price_per_min if isinstance(session.container.price_per_min, Decimal) else Decimal(str(session.container.price_per_min))
+
+        elapsed_minutes = Decimal(str(elapsed_time.total_seconds())) / Decimal("60")
+        session_fee = (price_per_min * elapsed_minutes).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        row["session_count"] += 1
+        row["total_elapsed"] = (row["total_elapsed"] or timezone.timedelta(0)) + elapsed_time
+        row["total_fee"] += session_fee
+
+        if session.stopped_at and (row["last_used_at"] is None or session.stopped_at > row["last_used_at"]):
+            row["last_used_at"] = session.stopped_at
+
+        distinct_users.add(username)
+        total_sessions += 1
+        total_elapsed = (total_elapsed or timezone.timedelta(0)) + elapsed_time
+        total_fee += session_fee
+
+    report_rows = []
+    for row in grouped_rows.values():
+        session_count = row["session_count"] or 0
+        total_elapsed_value = row["total_elapsed"] or timezone.timedelta(0)
+        avg_elapsed_value = total_elapsed_value / session_count if session_count else timezone.timedelta(0)
 
         report_rows.append(
             {
-                "username": row["user__username"],
-                "full_name": " ".join(
-                    part for part in [row["user__first_name"], row["user__last_name"]] if part
-                ),
-                "profile_label": profile_labels.get(row["profile"], row["profile"]),
-                "session_count": row["session_count"] or 0,
-                "total_elapsed_display": _format_duration(total_elapsed),
-                "avg_elapsed_display": _format_duration(avg_elapsed),
+                "username": row["username"],
+                "full_name": row["full_name"],
+                "profile_label": row["profile_label"],
+                "session_count": session_count,
+                "total_elapsed_display": _format_duration(total_elapsed_value),
+                "avg_elapsed_display": _format_duration(avg_elapsed_value),
+                "total_fee_display": _format_currency(row["total_fee"]),
                 "last_used_at": timezone.localtime(row["last_used_at"]).strftime("%Y-%m-%d %H:%M")
                 if row["last_used_at"]
                 else "-",
-                "note": "",
+                "note": row["note"],
             }
         )
-
-        distinct_users.add(row["user__username"])
-        total_sessions += row["session_count"] or 0
-        if total_elapsed:
-            total_elapsed_seconds += int(total_elapsed.total_seconds())
 
     summary = {
         "total_users": len(distinct_users),
         "total_sessions": total_sessions,
-        "total_elapsed_display": _format_duration(total_elapsed_seconds),
+        "total_elapsed_display": _format_duration(total_elapsed or timezone.timedelta(0)),
+        "total_fee_display": _format_currency(total_fee),
     }
 
     user_options = [

@@ -121,7 +121,7 @@ class TrainingContainer(models.Model):
     )
     status = models.CharField("状态", max_length=16, choices=Status.choices, default=Status.FREE)
     host_port = models.PositiveIntegerField("主机端口", null=True, blank=True)
-    price_per_min = models.DecimalField("price per min", max_digits=10, decimal_places=2, null=True, blank=True, default=0.00)
+    price_per_min = models.DecimalField("单价(元/分钟)", max_digits=10, decimal_places=2, null=True, blank=True, default=0.00)
     token_nonce = models.CharField("连接签名随机值", max_length=64, blank=True, default="")
     allocated_at = models.DateTimeField("分配时间", null=True, blank=True)
     started_at = models.DateTimeField("启动时间", null=True, blank=True)
