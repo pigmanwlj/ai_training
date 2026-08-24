@@ -296,6 +296,9 @@
       if (s.fitAddon) {
         requestAnimationFrame(function () {
           s.fitAddon.fit();
+          if (s.sendResize) {
+            s.sendResize();
+          }
         });
       }
     }
@@ -334,6 +337,12 @@
       try {
         if (session.inputDisposable) {
           session.inputDisposable.dispose();
+        }
+      } catch (e) {}
+
+      try {
+        if (session.resizeDisposable) {
+          session.resizeDisposable.dispose();
         }
       } catch (e) {}
 
@@ -436,7 +445,9 @@
         term: term,
         fitAddon: fitAddon,
         ws: null,
-        inputDisposable: null
+        inputDisposable: null,
+        resizeDisposable: null,
+        sendResize: null
       };
       sessions[sessionId] = session;
 
@@ -472,10 +483,18 @@
         const ws = new WebSocket(wsUrl);
         session.ws = ws;
 
+        function sendResize() {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+          }
+        }
+        session.sendResize = sendResize;
+
         ws.onopen = function () {
           status.textContent = "Connected";
           term.write("\r\nConnected to pod shell\r\n");
           fitAddon.fit();
+          sendResize();
         };
 
         ws.onmessage = function (e) {
@@ -494,8 +513,12 @@
 
         session.inputDisposable = term.onData(function (d) {
           if (session.ws && session.ws.readyState === WebSocket.OPEN) {
-            session.ws.send(d);
+            session.ws.send(JSON.stringify({ type: "stdin", data: d }));
           }
+        });
+
+        session.resizeDisposable = term.onResize(function () {
+          sendResize();
         });
       } catch (err) {
         status.textContent = "Error";

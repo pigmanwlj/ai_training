@@ -1,4 +1,5 @@
 import asyncio
+import json
 from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
@@ -9,6 +10,9 @@ from kubernetes.config.config_exception import ConfigException
 from kubernetes.stream import stream
 
 from myapp.models import TrainingContainer
+
+# k8s exec protocol channel used by kubectl exec to convey TTY resize events
+RESIZE_CHANNEL = 4
 
 
 def _load_k8s_api_client():
@@ -141,11 +145,47 @@ class PodTerminalConsumer(AsyncWebsocketConsumer):
             except Exception:
                 pass
 
+    async def _resize_terminal(self, cols, rows):
+        try:
+            cols = int(cols)
+            rows = int(rows)
+        except (TypeError, ValueError):
+            return
+
+        if cols <= 0 or rows <= 0:
+            return
+
+        try:
+            await asyncio.to_thread(
+                self.exec_ws.write_channel,
+                RESIZE_CHANNEL,
+                json.dumps({"Width": cols, "Height": rows}),
+            )
+        except Exception:
+            pass
+
     async def receive(self, text_data=None, bytes_data=None):
         if not getattr(self, "exec_ws", None):
             return
 
-        data = bytes_data if bytes_data is not None else (text_data or "").encode()
+        if text_data:
+            try:
+                msg = json.loads(text_data)
+            except (ValueError, TypeError):
+                msg = None
+
+            if isinstance(msg, dict) and msg.get("type") == "resize":
+                await self._resize_terminal(msg.get("cols"), msg.get("rows"))
+                return
+
+            if isinstance(msg, dict) and msg.get("type") == "stdin":
+                data = (msg.get("data") or "").encode()
+            else:
+                # Backward-compatible fallback: treat unrecognized text as raw keystrokes
+                data = text_data.encode()
+        else:
+            data = bytes_data or b""
+
         if not data:
             return
 
