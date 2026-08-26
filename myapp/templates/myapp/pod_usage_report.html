@@ -429,7 +429,7 @@
       <div class="table-header">
         <div>
           <h2>Usage Breakdown</h2>
-          <div class="meta">Each row represents one user and one pod profile total.</div>
+          <div class="meta">Each row represents one user and one pod session.</div>
         </div>
 
         <div class="table-controls">
@@ -486,11 +486,11 @@
             <tr>
               <th>User</th>
               <th>Pod Type</th>
-              <th>Sessions</th>
-              <th>Total Elapsed</th>
-              <th>Total Fee</th>
-              <th>Average Elapsed</th>
-              <th>Last Used At</th>
+              <th>Pod Name</th>
+              <th>Started At</th>
+              <th>Stopped At</th>
+              <th>Elapsed</th>
+              <th>Fee</th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -505,11 +505,11 @@
                         <span style="color: var(--muted); font-size: 13px;">{{ row.full_name|default:"-" }}</span>
                       </td>
                       <td><span class="pill">{{ row.profile_label }}</span></td>
-                      <td>{{ row.session_count }}</td>
-                      <td><strong>{{ row.total_elapsed_display }}</strong></td>
-                      <td><strong>¥{{ row.total_fee_display }}</strong></td>
-                      <td>{{ row.avg_elapsed_display }}</td>
-                      <td>{{ row.last_used_at|default:"-" }}</td>
+                      <td>{{ row.pod_name }}</td>
+                      <td>{{ row.session_started_at }}</td>
+                      <td>{{ row.session_stopped_at }}</td>
+                      <td><strong>{{ row.elapsed_display }}</strong></td>
+                      <td><strong>¥{{ row.session_fee_display }}</strong></td>
                       <td>{{ row.note|default:"" }}</td>
                     </tr>
                   {% endfor %}
@@ -517,7 +517,7 @@
                   <tr>
                     <td colspan="8">
                       <div class="empty">
-                        No usage rows yet. Once the backend records pod sessions and elapsed time, the report will appear here.
+                        No usage rows yet. Once the backend records pod sessions, the report will appear here.
                       </div>
                     </td>
                   </tr>
@@ -531,11 +531,11 @@
                     <span style="color: var(--muted); font-size: 13px;">{{ row.full_name|default:"-" }}</span>
                   </td>
                   <td><span class="pill">{{ row.profile_label }}</span></td>
-                  <td>{{ row.session_count }}</td>
-                  <td><strong>{{ row.total_elapsed_display }}</strong></td>
-                  <td><strong>¥{{ row.total_fee_display }}</strong></td>
-                  <td>{{ row.avg_elapsed_display }}</td>
-                  <td>{{ row.last_used_at|default:"-" }}</td>
+                  <td>{{ row.pod_name }}</td>
+                  <td>{{ row.session_started_at }}</td>
+                  <td>{{ row.session_stopped_at }}</td>
+                  <td><strong>{{ row.elapsed_display }}</strong></td>
+                  <td><strong>¥{{ row.session_fee_display }}</strong></td>
                   <td>{{ row.note|default:"" }}</td>
                 </tr>
               {% endfor %}
@@ -543,7 +543,7 @@
               <tr>
                 <td colspan="8">
                   <div class="empty">
-                    No usage rows yet. Once the backend records pod sessions and elapsed time, the report will appear here.
+                    No usage rows yet. Once the backend records pod sessions, the report will appear here.
                   </div>
                 </td>
               </tr>

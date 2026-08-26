@@ -245,76 +245,52 @@ def training_usage_report(request):
         "id",
     )
 
-    grouped_rows = {}
     distinct_users = set()
     total_sessions = 0
     total_elapsed = None
     total_fee = Decimal("0.00")
+    report_rows = []
 
     for session in report_sessions:
         username = session.user.username if session.user_id else ""
         first_name = session.user.first_name if session.user_id else ""
         last_name = session.user.last_name if session.user_id else ""
         profile = session.profile
-
-        key = (username, first_name, last_name, profile)
-
-        if key not in grouped_rows:
-            grouped_rows[key] = {
-                "username": username,
-                "full_name": " ".join(part for part in [first_name, last_name] if part),
-                "profile": profile,
-                "profile_label": profile_labels.get(profile, profile),
-                "session_count": 0,
-                "total_elapsed": None,
-                "avg_elapsed": None,
-                "last_used_at": None,
-                "total_fee": Decimal("0.00"),
-                "note": "",
-            }
-
-        row = grouped_rows[key]
         elapsed_time = session.elapsed_time or timezone.timedelta(0)
+
         price_per_min = Decimal("0.00")
         if session.container and session.container.price_per_min is not None:
-            price_per_min = session.container.price_per_min if isinstance(session.container.price_per_min, Decimal) else Decimal(str(session.container.price_per_min))
+            price_per_min = (
+                session.container.price_per_min
+                if isinstance(session.container.price_per_min, Decimal)
+                else Decimal(str(session.container.price_per_min))
+            )
 
         elapsed_minutes = Decimal(str(elapsed_time.total_seconds())) / Decimal("60")
         session_fee = (price_per_min * elapsed_minutes).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        row["session_count"] += 1
-        row["total_elapsed"] = (row["total_elapsed"] or timezone.timedelta(0)) + elapsed_time
-        row["total_fee"] += session_fee
-
-        if session.stopped_at and (row["last_used_at"] is None or session.stopped_at > row["last_used_at"]):
-            row["last_used_at"] = session.stopped_at
+        report_rows.append(
+            {
+                "username": username,
+                "full_name": " ".join(part for part in [first_name, last_name] if part),
+                "profile_label": profile_labels.get(profile, profile),
+                "pod_name": session.pod_name,
+                "session_started_at": timezone.localtime(session.started_at).strftime("%Y-%m-%d %H:%M")
+                if session.started_at
+                else "-",
+                "session_stopped_at": timezone.localtime(session.stopped_at).strftime("%Y-%m-%d %H:%M")
+                if session.stopped_at
+                else "-",
+                "elapsed_display": _format_duration(elapsed_time),
+                "session_fee_display": _format_currency(session_fee),
+                "note": "",
+            }
+        )
 
         distinct_users.add(username)
         total_sessions += 1
         total_elapsed = (total_elapsed or timezone.timedelta(0)) + elapsed_time
         total_fee += session_fee
-
-    report_rows = []
-    for row in grouped_rows.values():
-        session_count = row["session_count"] or 0
-        total_elapsed_value = row["total_elapsed"] or timezone.timedelta(0)
-        avg_elapsed_value = total_elapsed_value / session_count if session_count else timezone.timedelta(0)
-
-        report_rows.append(
-            {
-                "username": row["username"],
-                "full_name": row["full_name"],
-                "profile_label": row["profile_label"],
-                "session_count": session_count,
-                "total_elapsed_display": _format_duration(total_elapsed_value),
-                "avg_elapsed_display": _format_duration(avg_elapsed_value),
-                "total_fee_display": _format_currency(row["total_fee"]),
-                "last_used_at": timezone.localtime(row["last_used_at"]).strftime("%Y-%m-%d %H:%M")
-                if row["last_used_at"]
-                else "-",
-                "note": row["note"],
-            }
-        )
 
     summary = {
         "total_users": len(distinct_users),

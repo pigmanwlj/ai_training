@@ -29,7 +29,7 @@ class PodUsageReportTests(TestCase):
             price_per_min=Decimal("2.00"),
         )
 
-    def _create_usage_row(self, username, started_at, minutes=10):
+    def _create_session(self, username, started_at, minutes=10):
         user = User.objects.create_user(username=username, password="testpass123")
         PodUsageSession.objects.create(
             user=user,
@@ -44,8 +44,8 @@ class PodUsageReportTests(TestCase):
     def test_usage_report_paginates_ten_rows_per_page(self):
         base_time = timezone.now() - timedelta(days=1)
         for index in range(11):
-            self._create_usage_row(
-                username=f"user{index + 1}",
+            self._create_session(
+                username=f"user{index + 1:02d}",
                 started_at=base_time + timedelta(minutes=index),
             )
 
@@ -63,8 +63,8 @@ class PodUsageReportTests(TestCase):
     def test_usage_report_second_page_shows_remaining_row(self):
         base_time = timezone.now() - timedelta(days=1)
         for index in range(11):
-            self._create_usage_row(
-                username=f"user{index + 1}",
+            self._create_session(
+                username=f"user{index + 1:02d}",
                 started_at=base_time + timedelta(minutes=index),
             )
 
