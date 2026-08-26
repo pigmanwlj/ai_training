@@ -138,6 +138,17 @@
       border-color: var(--line);
     }
 
+    .btn-ghost {
+      background: #f5f8fd;
+      color: var(--text);
+      border-color: var(--line);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .summary-grid {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -178,8 +189,8 @@
     .table-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 12px;
+      align-items: flex-start;
+      gap: 16px;
       padding: 18px 20px;
       border-bottom: 1px solid var(--line);
       background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
@@ -193,6 +204,32 @@
     .table-header .meta {
       color: var(--muted);
       font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .table-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pager form {
+      margin: 0;
+    }
+
+    .pager-info {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
     }
 
     .table-wrap {
@@ -271,6 +308,18 @@
 
       .actions {
         margin-left: 0;
+      }
+
+      .table-header {
+        flex-direction: column;
+      }
+
+      .table-controls {
+        align-items: flex-start;
+      }
+
+      .pager {
+        justify-content: flex-start;
       }
     }
 
@@ -382,7 +431,53 @@
           <h2>Usage Breakdown</h2>
           <div class="meta">Each row represents one user and one pod profile total.</div>
         </div>
-        <div class="pill green">{{ report_rows|length|default:0 }} rows</div>
+
+        <div class="table-controls">
+          <div class="pill green">
+            {% if page_obj %}
+              {{ page_obj.paginator.count }} rows total
+            {% else %}
+              {{ report_rows|length|default:0 }} rows
+            {% endif %}
+          </div>
+
+          {% if page_obj and page_obj.paginator.num_pages > 1 %}
+            <div class="pager">
+              {% if page_obj.has_previous %}
+                <form method="get">
+                  <input type="hidden" name="user" value="{{ selected_user }}">
+                  <input type="hidden" name="profile" value="{{ selected_profile }}">
+                  <input type="hidden" name="start" value="{{ start_date|default_if_none:'' }}">
+                  <input type="hidden" name="end" value="{{ end_date|default_if_none:'' }}">
+                  <input type="hidden" name="page" value="{{ page_obj.previous_page_number }}">
+                  <button class="btn btn-ghost" type="submit">Page Up</button>
+                </form>
+              {% else %}
+                <button class="btn btn-ghost" type="button" disabled>Page Up</button>
+              {% endif %}
+
+              <div class="pager-info">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                {% if page_obj.start_index and page_obj.end_index %}
+                  &nbsp;|&nbsp;Showing {{ page_obj.start_index }}-{{ page_obj.end_index }}
+                {% endif %}
+              </div>
+
+              {% if page_obj.has_next %}
+                <form method="get">
+                  <input type="hidden" name="user" value="{{ selected_user }}">
+                  <input type="hidden" name="profile" value="{{ selected_profile }}">
+                  <input type="hidden" name="start" value="{{ start_date|default_if_none:'' }}">
+                  <input type="hidden" name="end" value="{{ end_date|default_if_none:'' }}">
+                  <input type="hidden" name="page" value="{{ page_obj.next_page_number }}">
+                  <button class="btn btn-ghost" type="submit">Page Down</button>
+                </form>
+              {% else %}
+                <button class="btn btn-ghost" type="button" disabled>Page Down</button>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
       </div>
 
       <div class="table-wrap">
@@ -400,7 +495,35 @@
             </tr>
           </thead>
           <tbody>
-            {% if report_rows %}
+            {% if page_obj %}
+              {% with rows=page_obj.object_list %}
+                {% if rows %}
+                  {% for row in rows %}
+                    <tr>
+                      <td>
+                        <strong>{{ row.username }}</strong><br>
+                        <span style="color: var(--muted); font-size: 13px;">{{ row.full_name|default:"-" }}</span>
+                      </td>
+                      <td><span class="pill">{{ row.profile_label }}</span></td>
+                      <td>{{ row.session_count }}</td>
+                      <td><strong>{{ row.total_elapsed_display }}</strong></td>
+                      <td><strong>¥{{ row.total_fee_display }}</strong></td>
+                      <td>{{ row.avg_elapsed_display }}</td>
+                      <td>{{ row.last_used_at|default:"-" }}</td>
+                      <td>{{ row.note|default:"" }}</td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="8">
+                      <div class="empty">
+                        No usage rows yet. Once the backend records pod sessions and elapsed time, the report will appear here.
+                      </div>
+                    </td>
+                  </tr>
+                {% endif %}
+              {% endwith %}
+            {% elif report_rows %}
               {% for row in report_rows %}
                 <tr>
                   <td>
@@ -431,10 +554,11 @@
     </section>
 
     <div class="footer-note">
-      Wiring note: this template expects a view to pass <strong>report_rows</strong>, <strong>summary</strong>,
-      <strong>user_options</strong>, <strong>profile_options</strong>, <strong>selected_user</strong>,
-      <strong>selected_profile</strong>, <strong>start_date</strong>, <strong>end_date</strong>, <strong>generated_at</strong>,
-      and a <strong>summary.total_fee_display</strong> value.
+      Wiring note: this template expects a view to pass <strong>report_rows</strong> or a paginated <strong>page_obj</strong>,
+      plus <strong>summary</strong>, <strong>user_options</strong>, <strong>profile_options</strong>,
+      <strong>selected_user</strong>, <strong>selected_profile</strong>, <strong>start_date</strong>,
+      <strong>end_date</strong>, <strong>generated_at</strong>, and <strong>summary.total_fee_display</strong>.
+      To show 10 items at a time, the view should paginate the rows with a page size of 10.
     </div>
   </div>
 </body>

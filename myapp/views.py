@@ -14,6 +14,7 @@ from kubernetes.config.config_exception import ConfigException
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core import signing
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
@@ -214,6 +215,7 @@ def training_usage_report(request):
     selected_profile = request.GET.get("profile", "").strip()
     start_date = request.GET.get("start", "").strip()
     end_date = request.GET.get("end", "").strip()
+    page_number = request.GET.get("page", 1)
 
     report_qs = PodUsageSession.objects.select_related("user", "container").filter(
         started_at__isnull=False,
@@ -332,11 +334,15 @@ def training_usage_report(request):
         )
     ]
 
+    paginator = Paginator(report_rows, 10)
+    page_obj = paginator.get_page(page_number)
+
     return render(
         request,
         "myapp/pod_usage_report.html",
         {
             "report_rows": report_rows,
+            "page_obj": page_obj,
             "summary": summary,
             "user_options": user_options,
             "profile_options": profile_choices,
