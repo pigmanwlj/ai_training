@@ -214,6 +214,46 @@
       gap: 10px;
     }
 
+    .page-jump {
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-2);
+    }
+
+    .page-jump label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .page-jump input {
+      width: 110px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .page-jump form {
+      margin: 0;
+      display: flex;
+      align-items: end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .pager {
       display: flex;
       align-items: center;
@@ -263,6 +303,23 @@
 
     tr:hover td {
       background: #f9fbff;
+    }
+
+    .sort-link {
+      color: inherit;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sort-link:hover {
+      color: var(--accent);
+    }
+
+    .sort-indicator {
+      font-size: 11px;
+      line-height: 1;
     }
 
     .pill {
@@ -319,6 +376,10 @@
       }
 
       .pager {
+        justify-content: flex-start;
+      }
+
+      .page-jump {
         justify-content: flex-start;
       }
     }
@@ -429,7 +490,7 @@
       <div class="table-header">
         <div>
           <h2>Usage Breakdown</h2>
-          <div class="meta">Each row represents one user and one pod session.</div>
+          <div class="meta">Each row represents one user and one pod session. Click a column to sort ascending or descending. You can also jump directly to a page number.</div>
         </div>
 
         <div class="table-controls">
@@ -441,6 +502,22 @@
             {% endif %}
           </div>
 
+          <div class="page-jump">
+            <form method="get">
+              <input type="hidden" name="user" value="{{ selected_user }}">
+              <input type="hidden" name="profile" value="{{ selected_profile }}">
+              <input type="hidden" name="start" value="{{ start_date|default_if_none:'' }}">
+              <input type="hidden" name="end" value="{{ end_date|default_if_none:'' }}">
+              <input type="hidden" name="sort" value="{{ sort_field }}">
+              <input type="hidden" name="direction" value="{{ sort_direction }}">
+              <div>
+                <label for="page">Page no.</label>
+                <input id="page" name="page" type="number" min="1" max="{% if page_obj %}{{ page_obj.paginator.num_pages }}{% else %}1{% endif %}" value="{% if page_obj %}{{ page_obj.number }}{% else %}1{% endif %}">
+              </div>
+              <button class="btn btn-ghost" type="submit">Go</button>
+            </form>
+          </div>
+
           {% if page_obj and page_obj.paginator.num_pages > 1 %}
             <div class="pager">
               {% if page_obj.has_previous %}
@@ -449,6 +526,8 @@
                   <input type="hidden" name="profile" value="{{ selected_profile }}">
                   <input type="hidden" name="start" value="{{ start_date|default_if_none:'' }}">
                   <input type="hidden" name="end" value="{{ end_date|default_if_none:'' }}">
+                  <input type="hidden" name="sort" value="{{ sort_field }}">
+                  <input type="hidden" name="direction" value="{{ sort_direction }}">
                   <input type="hidden" name="page" value="{{ page_obj.previous_page_number }}">
                   <button class="btn btn-ghost" type="submit">Page Up</button>
                 </form>
@@ -469,6 +548,8 @@
                   <input type="hidden" name="profile" value="{{ selected_profile }}">
                   <input type="hidden" name="start" value="{{ start_date|default_if_none:'' }}">
                   <input type="hidden" name="end" value="{{ end_date|default_if_none:'' }}">
+                  <input type="hidden" name="sort" value="{{ sort_field }}">
+                  <input type="hidden" name="direction" value="{{ sort_direction }}">
                   <input type="hidden" name="page" value="{{ page_obj.next_page_number }}">
                   <button class="btn btn-ghost" type="submit">Page Down</button>
                 </form>
@@ -484,14 +565,46 @@
         <table>
           <thead>
             <tr>
-              <th>User</th>
-              <th>Pod Type</th>
-              <th>Pod Name</th>
-              <th>Started At</th>
-              <th>Stopped At</th>
-              <th>Elapsed</th>
-              <th>Fee</th>
-              <th>Notes</th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=username&direction={% if sort_field == 'username' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  User{% if sort_field == 'username' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=profile&direction={% if sort_field == 'profile' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Pod Type{% if sort_field == 'profile' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=pod_name&direction={% if sort_field == 'pod_name' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Pod Name{% if sort_field == 'pod_name' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=started_at&direction={% if sort_field == 'started_at' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Started At{% if sort_field == 'started_at' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=stopped_at&direction={% if sort_field == 'stopped_at' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Stopped At{% if sort_field == 'stopped_at' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=elapsed&direction={% if sort_field == 'elapsed' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Elapsed{% if sort_field == 'elapsed' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=fee&direction={% if sort_field == 'fee' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Fee{% if sort_field == 'fee' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=note&direction={% if sort_field == 'note' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  Notes{% if sort_field == 'note' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -557,8 +670,8 @@
       Wiring note: this template expects a view to pass <strong>report_rows</strong> or a paginated <strong>page_obj</strong>,
       plus <strong>summary</strong>, <strong>user_options</strong>, <strong>profile_options</strong>,
       <strong>selected_user</strong>, <strong>selected_profile</strong>, <strong>start_date</strong>,
-      <strong>end_date</strong>, <strong>generated_at</strong>, and <strong>summary.total_fee_display</strong>.
-      To show 10 items at a time, the view should paginate the rows with a page size of 10.
+      <strong>end_date</strong>, <strong>generated_at</strong>, and <strong>sort_field</strong>/<strong>sort_direction</strong>.
+      Use the page number box to jump directly to a specific page when there are many pages.
     </div>
   </div>
 </body>

@@ -216,6 +216,11 @@ def training_usage_report(request):
     start_date = request.GET.get("start", "").strip()
     end_date = request.GET.get("end", "").strip()
     page_number = request.GET.get("page", 1)
+    sort_field = request.GET.get("sort", "").strip()
+    sort_direction = request.GET.get("direction", "asc").strip().lower()
+
+    if sort_direction not in {"asc", "desc"}:
+        sort_direction = "asc"
 
     report_qs = PodUsageSession.objects.select_related("user", "container").filter(
         started_at__isnull=False,
@@ -283,6 +288,10 @@ def training_usage_report(request):
                 else "-",
                 "elapsed_display": _format_duration(elapsed_time),
                 "session_fee_display": _format_currency(session_fee),
+                "session_started_at_raw": session.started_at,
+                "session_stopped_at_raw": session.stopped_at,
+                "elapsed_seconds_raw": elapsed_time.total_seconds(),
+                "session_fee_raw": session_fee,
                 "note": "",
             }
         )
@@ -291,6 +300,27 @@ def training_usage_report(request):
         total_sessions += 1
         total_elapsed = (total_elapsed or timezone.timedelta(0)) + elapsed_time
         total_fee += session_fee
+
+    sort_key_map = {
+        "username": lambda row: (row["username"] or "").lower(),
+        "profile": lambda row: (row["profile_label"] or "").lower(),
+        "pod_name": lambda row: (row["pod_name"] or "").lower(),
+        "started_at": lambda row: row["session_started_at_raw"],
+        "stopped_at": lambda row: row["session_stopped_at_raw"],
+        "elapsed": lambda row: row["elapsed_seconds_raw"],
+        "fee": lambda row: row["session_fee_raw"],
+        "note": lambda row: (row["note"] or "").lower(),
+    }
+
+    if sort_field in sort_key_map:
+        report_rows = sorted(
+            report_rows,
+            key=sort_key_map[sort_field],
+            reverse=sort_direction == "desc",
+        )
+    else:
+        sort_field = ""
+        sort_direction = ""
 
     summary = {
         "total_users": len(distinct_users),
@@ -326,6 +356,8 @@ def training_usage_report(request):
             "selected_profile": selected_profile,
             "start_date": start_date,
             "end_date": end_date,
+            "sort_field": sort_field,
+            "sort_direction": sort_direction,
             "generated_at": timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M"),
         },
     )
