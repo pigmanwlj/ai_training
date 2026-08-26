@@ -129,65 +129,38 @@
       border-left: 4px solid #ddd;
     }
 
-    body.terminal-fullscreen {
+    .tab-panel:fullscreen {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      min-height: 0;
       margin: 0;
-      overflow: hidden;
-      background: #0b0b0b;
+      padding: 0;
+      background: #101010;
     }
 
-    body.terminal-fullscreen .page-card {
-      position: fixed;
-      inset: 0;
-      z-index: 9999;
-      width: auto;
-      max-width: none;
-      margin: 0;
+    .tab-panel:fullscreen .terminal-card {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
       border: none;
       border-radius: 0;
-      padding: 10px;
-      box-shadow: none;
-      background: #101010;
-      color: #f5f5f5;
-    }
-
-    body.terminal-fullscreen .tabs-bar {
-      border-bottom-color: #2f2f2f;
-      margin-top: 8px;
-    }
-
-    body.terminal-fullscreen .tab-btn {
-      background: #1c1c1c;
-      border-color: #3b3b3b;
-      color: #f2f2f2;
-    }
-
-    body.terminal-fullscreen .tab-btn.active {
-      background: #1f6feb;
-      border-color: #1f6feb;
-      color: white;
-    }
-
-    body.terminal-fullscreen .terminal-card {
-      border-color: #333;
       background: #000;
     }
 
-    body.terminal-fullscreen .terminal-box {
-      height: calc(100vh - 210px);
+    .tab-panel:fullscreen .terminal-header {
+      flex-shrink: 0;
+    }
+
+    .tab-panel:fullscreen .terminal-box {
+      flex: 1 1 auto;
+      width: 100%;
+      height: auto;
       min-height: 0;
-    }
-
-    body.terminal-fullscreen .msg {
-      background: #1c1c1c;
-      border-left-color: #4a4a4a;
-      color: #ececec;
-    }
-
-    body.terminal-fullscreen .controls button,
-    body.terminal-fullscreen .row select {
-      background: #1d1d1d;
-      color: #f0f0f0;
-      border: 1px solid #444;
     }
   </style>
 </head>
@@ -237,12 +210,15 @@
       </div>
     </form>
 
-    <div class="msg" style="color: red; font-weight: bold;">Please run "export OLLAMA_HOST=$OLLAMA_REPO_URL" firstly to select AI model repository.</div>
+    <div class="msg" style="color: red; font-weight: bold;">
+      Please run "export OLLAMA_HOST=$OLLAMA_REPO_URL" firstly to select AI model repository.
+    </div>
+
     <div class="tabs-bar" id="tabs-bar"></div>
     <div class="tab-panels" id="tab-panels"></div>
   </div>
 
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
 
@@ -250,7 +226,11 @@
     function getCookie(name) {
       const v = "; " + document.cookie;
       const parts = v.split("; " + name + "=");
-      if (parts.length === 2) return parts.pop().split(";").shift();
+
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
+
       return "";
     }
 
@@ -282,6 +262,7 @@
     function toggleScriptSelect() {
       const isStart = actionEl.value === "start";
       scriptEl.disabled = !isStart;
+
       if (!isStart) {
         scriptEl.value = "";
       }
@@ -290,24 +271,74 @@
     actionEl.addEventListener("change", toggleScriptSelect);
     toggleScriptSelect();
 
-    function fitActiveSession() {
-      if (!activeSessionId || !sessions[activeSessionId]) return;
-      const s = sessions[activeSessionId];
-      if (s.fitAddon) {
-        requestAnimationFrame(function () {
-          s.fitAddon.fit();
-          if (s.sendResize) {
-            s.sendResize();
-          }
-        });
+    function fitSession(session) {
+      if (!session || !session.fitAddon || !session.terminalBox) {
+        return;
       }
+
+      requestAnimationFrame(function () {
+        if (
+          session.terminalBox.clientWidth === 0 ||
+          session.terminalBox.clientHeight === 0
+        ) {
+          return;
+        }
+
+        session.fitAddon.fit();
+
+        if (session.sendResize) {
+          session.sendResize();
+        }
+      });
     }
 
-    fullscreenBtn.addEventListener("click", function () {
-      document.body.classList.toggle("terminal-fullscreen");
-      const isFull = document.body.classList.contains("terminal-fullscreen");
-      fullscreenBtn.textContent = isFull ? "Small Screen" : "Full Screen";
-      fitActiveSession();
+    function fitActiveSession() {
+      if (!activeSessionId || !sessions[activeSessionId]) {
+        return;
+      }
+
+      fitSession(sessions[activeSessionId]);
+    }
+
+    function updateFullscreenButton() {
+      const isFullscreen = Boolean(document.fullscreenElement);
+
+      fullscreenBtn.textContent = isFullscreen
+        ? "Small Screen"
+        : "Full Screen";
+    }
+
+    fullscreenBtn.addEventListener("click", async function () {
+      const session = sessions[activeSessionId];
+
+      if (!session || !session.panelEl) {
+        return;
+      }
+
+      try {
+        if (document.fullscreenElement === session.panelEl) {
+          await document.exitFullscreen();
+          return;
+        }
+
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        }
+
+        await session.panelEl.requestFullscreen();
+      } catch (error) {
+        console.error("Unable to change terminal fullscreen state.", error);
+      }
+    });
+
+    document.addEventListener("fullscreenchange", function () {
+      updateFullscreenButton();
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          fitActiveSession();
+        });
+      });
     });
 
     window.addEventListener("resize", fitActiveSession);
@@ -318,6 +349,7 @@
       Object.keys(sessions).forEach(function (id) {
         const tab = sessions[id].tabEl;
         const panel = sessions[id].panelEl;
+
         if (id === sessionId) {
           tab.classList.add("active");
           panel.classList.add("active");
@@ -332,7 +364,16 @@
 
     function removeSession(sessionId) {
       const session = sessions[sessionId];
-      if (!session) return;
+
+      if (!session) {
+        return;
+      }
+
+      try {
+        if (session.resizeObserver) {
+          session.resizeObserver.disconnect();
+        }
+      } catch (e) {}
 
       try {
         if (session.inputDisposable) {
@@ -359,6 +400,7 @@
       if (session.tabEl.parentNode) {
         session.tabEl.parentNode.removeChild(session.tabEl);
       }
+
       if (session.panelEl.parentNode) {
         session.panelEl.parentNode.removeChild(session.panelEl);
       }
@@ -366,6 +408,7 @@
       delete sessions[sessionId];
 
       const ids = Object.keys(sessions);
+
       if (activeSessionId === sessionId) {
         if (ids.length > 0) {
           setActiveSession(ids[ids.length - 1]);
@@ -377,6 +420,7 @@
 
     async function createSessionTab() {
       sessionSeq += 1;
+
       const sessionId = "session-" + sessionSeq;
 
       const tabBtn = document.createElement("button");
@@ -437,73 +481,106 @@
       const fitAddon = new FitAddon.FitAddon();
       term.loadAddon(fitAddon);
       term.open(terminalBox);
-      fitAddon.fit();
 
       const session = {
         tabEl: tabBtn,
         panelEl: panel,
         term: term,
         fitAddon: fitAddon,
+        terminalBox: terminalBox,
         ws: null,
         inputDisposable: null,
         resizeDisposable: null,
+        resizeObserver: null,
         sendResize: null
       };
+
       sessions[sessionId] = session;
+
+      session.resizeObserver = new ResizeObserver(function () {
+        fitSession(session);
+      });
+
+      session.resizeObserver.observe(terminalBox);
+      fitSession(session);
 
       function closeSession() {
         removeSession(sessionId);
       }
 
-      tabClose.addEventListener("click", closeSession);
+      tabClose.addEventListener("click", function (event) {
+        event.stopPropagation();
+        closeSession();
+      });
+
       headerRight.addEventListener("click", closeSession);
-      tabBtn.addEventListener("click", function (e) {
-        if (e.target === tabClose) return;
+
+      tabBtn.addEventListener("click", function (event) {
+        if (event.target === tabClose) {
+          return;
+        }
+
         setActiveSession(sessionId);
       });
 
       setActiveSession(sessionId);
 
       try {
-        const res = await fetch("/myapp/training/connect-terminal/", {
+        const response = await fetch("/myapp/training/connect-terminal/", {
           method: "POST",
-          headers: { "X-CSRFToken": getCookie("csrftoken") }
+          headers: {
+            "X-CSRFToken": getCookie("csrftoken")
+          }
         });
 
-        if (!res.ok) {
+        if (!response.ok) {
           status.textContent = "Failed";
           term.write("\r\nFailed to get terminal token.\r\n");
           return;
         }
 
-        const data = await res.json();
+        const data = await response.json();
         const wsBaseUrl = buildWebSocketBaseUrl();
-        const wsUrl = wsBaseUrl + data.ws_url + "?token=" + encodeURIComponent(data.token);
+        const wsUrl =
+          wsBaseUrl +
+          data.ws_url +
+          "?token=" +
+          encodeURIComponent(data.token);
 
         const ws = new WebSocket(wsUrl);
         session.ws = ws;
 
         function sendResize() {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+            ws.send(JSON.stringify({
+              type: "resize",
+              cols: term.cols,
+              rows: term.rows
+            }));
           }
         }
+
         session.sendResize = sendResize;
 
         ws.onopen = function () {
           status.textContent = "Connected";
           term.write("\r\nConnected to pod shell\r\n");
-          fitAddon.fit();
-          sendResize();
+          fitSession(session);
         };
 
-        ws.onmessage = function (e) {
-          term.write(e.data);
+        ws.onmessage = function (event) {
+          term.write(event.data);
         };
 
-        ws.onclose = function (e) {
+        ws.onclose = function (event) {
           status.textContent = "Closed";
-          term.write("\r\nSession closed (code=" + e.code + ", reason=" + (e.reason || "none") + ")\r\n");
+          term.write(
+            "\r\nSession closed (code=" +
+            event.code +
+            ", reason=" +
+            (event.reason || "none") +
+            ")\r\n"
+          );
         };
 
         ws.onerror = function () {
@@ -511,16 +588,19 @@
           term.write("\r\nWebSocket error\r\n");
         };
 
-        session.inputDisposable = term.onData(function (d) {
+        session.inputDisposable = term.onData(function (data) {
           if (session.ws && session.ws.readyState === WebSocket.OPEN) {
-            session.ws.send(JSON.stringify({ type: "stdin", data: d }));
+            session.ws.send(JSON.stringify({
+              type: "stdin",
+              data: data
+            }));
           }
         });
 
         session.resizeDisposable = term.onResize(function () {
           sendResize();
         });
-      } catch (err) {
+      } catch (error) {
         status.textContent = "Error";
         term.write("\r\nUnexpected error while connecting terminal.\r\n");
       }
