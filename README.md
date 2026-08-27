@@ -4,6 +4,8 @@ You can deploy it on Kubernetes with all modules management tools backend.
 
 mysql 8.0.46
 
+redis 8.10.0
+
 django 6.0.7
 
 daphne 4.2.3
