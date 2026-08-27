@@ -279,7 +279,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 1120px;
+      min-width: 1220px;
     }
 
     th,
@@ -596,6 +596,11 @@
                 </a>
               </th>
               <th>
+                <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=price_per_min&direction={% if sort_field == 'price_per_min' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
+                  yuan/min{% if sort_field == 'price_per_min' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th>
                 <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=fee&direction={% if sort_field == 'fee' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
                   Fee{% if sort_field == 'fee' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
                 </a>
@@ -622,13 +627,14 @@
                       <td>{{ row.session_started_at }}</td>
                       <td>{{ row.session_stopped_at }}</td>
                       <td><strong>{{ row.elapsed_display }}</strong></td>
+                      <td><strong>¥{{ row.price_per_min_display }}</strong></td>
                       <td><strong>¥{{ row.session_fee_display }}</strong></td>
                       <td>{{ row.note|default:"" }}</td>
                     </tr>
                   {% endfor %}
                 {% else %}
                   <tr>
-                    <td colspan="8">
+                    <td colspan="9">
                       <div class="empty">
                         No usage rows yet. Once the backend records pod sessions, the report will appear here.
                       </div>
@@ -648,13 +654,14 @@
                   <td>{{ row.session_started_at }}</td>
                   <td>{{ row.session_stopped_at }}</td>
                   <td><strong>{{ row.elapsed_display }}</strong></td>
+                  <td><strong>¥{{ row.price_per_min_display }}</strong></td>
                   <td><strong>¥{{ row.session_fee_display }}</strong></td>
                   <td>{{ row.note|default:"" }}</td>
                 </tr>
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="8">
+                <td colspan="9">
                   <div class="empty">
                     No usage rows yet. Once the backend records pod sessions, the report will appear here.
                   </div>

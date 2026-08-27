@@ -287,10 +287,12 @@ def training_usage_report(request):
                 if session.stopped_at
                 else "-",
                 "elapsed_display": _format_duration(elapsed_time),
+                "price_per_min_display": _format_currency(price_per_min),
                 "session_fee_display": _format_currency(session_fee),
                 "session_started_at_raw": session.started_at,
                 "session_stopped_at_raw": session.stopped_at,
                 "elapsed_seconds_raw": elapsed_time.total_seconds(),
+                "price_per_min_raw": price_per_min,
                 "session_fee_raw": session_fee,
                 "note": "",
             }
@@ -308,6 +310,7 @@ def training_usage_report(request):
         "started_at": lambda row: row["session_started_at_raw"],
         "stopped_at": lambda row: row["session_stopped_at_raw"],
         "elapsed": lambda row: row["elapsed_seconds_raw"],
+        "price_per_min": lambda row: row["price_per_min_raw"],
         "fee": lambda row: row["session_fee_raw"],
         "note": lambda row: (row["note"] or "").lower(),
     }
