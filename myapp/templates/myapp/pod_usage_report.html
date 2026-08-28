@@ -597,7 +597,7 @@
               </th>
               <th>
                 <a class="sort-link" href="?user={{ selected_user|urlencode }}&profile={{ selected_profile|urlencode }}&start={{ start_date|urlencode }}&end={{ end_date|urlencode }}&sort=price_per_min&direction={% if sort_field == 'price_per_min' and sort_direction == 'asc' %}desc{% else %}asc{% endif %}">
-                  yuan/min{% if sort_field == 'price_per_min' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
+                  price(yuan/min){% if sort_field == 'price_per_min' %} <span class="sort-indicator">{% if sort_direction == 'asc' %}&uarr;{% else %}&darr;{% endif %}</span>{% endif %}
                 </a>
               </th>
               <th>
